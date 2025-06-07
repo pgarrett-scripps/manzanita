@@ -657,3 +657,8 @@ class TestBasicFunctionality(unittest.TestCase):
         self.assertEqual(intervals[0].end, 5.0)
         self.assertEqual(intervals[1].begin, 7.0)
         self.assertEqual(intervals[1].end, 9.0)
+
+    def test_inclusive(self):
+        tree = IntervalTree(start_inclusive=True, end_inclusive=False)
+        interval = Interval(1, 10, None, start_inclusive=True, end_inclusive=True)
+        tree.add(interval)

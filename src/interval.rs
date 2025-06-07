@@ -103,39 +103,48 @@ impl Interval {
 
     /// Checks if the interval overlaps a range.
     /// 
-    /// Returns `true` if this interval overlaps with the range based on boundary inclusivity.
+    /// Returns `true` if this interval overlaps with the range [start, end) based on boundary inclusivity.
+    /// The range parameter is assumed to be [start, end) (start inclusive, end exclusive).
     pub fn overlaps_range(&self, start: f64, end: f64) -> bool {
-        // For two intervals to overlap, one must start before the other ends
-        let this_starts_before_other_ends = if self.start_inclusive {
-            self.begin <= end
+        // Two ranges overlap if they have any point in common
+        // For interval [a,b] and range [start,end):
+        // - No overlap if: b < start OR a >= end (considering boundary inclusivity)
+        // - Overlap if: NOT (no overlap condition)
+        
+        let no_overlap = if self.end_inclusive {
+            // If interval end is inclusive, no overlap if self.end < start
+            self.end < start
         } else {
-            self.begin < end
+            // If interval end is exclusive, no overlap if self.end <= start  
+            self.end <= start
+        } || if self.start_inclusive {
+            // If interval start is inclusive, no overlap if self.begin >= end
+            self.begin >= end
+        } else {
+            // If interval start is exclusive, no overlap if self.begin >= end (same condition)
+            self.begin >= end
         };
         
-        let other_starts_before_this_ends = if self.end_inclusive {
-            start <= self.end
-        } else {
-            start < self.end
-        };
-        
-        this_starts_before_other_ends && other_starts_before_this_ends
+        !no_overlap
     }
 
     /// Checks if this interval overlaps with another interval.
     /// 
     /// Returns `true` if the intervals overlap based on their boundary inclusivity.
     pub fn overlaps_interval(&self, other: &Interval) -> bool {
-        // Two intervals overlap if one starts before the other ends
+        // Two intervals overlap if: self.begin < other.end AND other.begin < self.end
+        // But we need to consider boundary inclusivity for touching intervals
+        
         let self_starts_before_other_ends = if self.start_inclusive && other.end_inclusive {
-            self.begin <= other.end
+            self.begin <= other.end  // If both boundaries are inclusive, use <=
         } else {
-            self.begin < other.end
+            self.begin < other.end   // Otherwise use <
         };
         
         let other_starts_before_self_ends = if other.start_inclusive && self.end_inclusive {
-            other.begin <= self.end
+            other.begin <= self.end  // If both boundaries are inclusive, use <=
         } else {
-            other.begin < self.end
+            other.begin < self.end   // Otherwise use <
         };
         
         self_starts_before_other_ends && other_starts_before_self_ends
@@ -245,8 +254,29 @@ impl Interval {
     /// Checks if this interval is enveloped by a range.
     /// 
     /// Returns `true` if this interval is completely contained within [start, end).
+    /// The enveloping range is assumed to be [start, end) (start inclusive, end exclusive).
     pub fn enveloped_by(&self, start: f64, end: f64) -> bool {
-        self.begin >= start && self.end <= end
+        // For interval [a,b] to be enveloped by range [start,end):
+        // - Interval start must be >= start: a >= start (respecting interval's start inclusivity)
+        // - Interval end must be < end: b < end (respecting interval's end inclusivity)
+        
+        let start_contained = if self.start_inclusive {
+            // If interval start is inclusive, it's contained if start <= self.begin
+            start <= self.begin
+        } else {
+            // If interval start is exclusive, it's contained if start < self.begin
+            start < self.begin
+        };
+        
+        let end_contained = if self.end_inclusive {
+            // If interval end is inclusive, it must be < end for containment in [start,end)
+            self.end < end
+        } else {
+            // If interval end is exclusive, it must be <= end for containment in [start,end)
+            self.end <= end
+        };
+        
+        start_contained && end_contained
     }
 }
 

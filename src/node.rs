@@ -71,20 +71,52 @@ impl IntervalNode {
         
         // Search left subtree if it might contain overlapping intervals
         if let Some(ref left) = self.left {
-            if left.max_end > point {
+            // An interval in the left subtree can contain the point if:
+            // 1. Its end > point (strict inequality), OR
+            // 2. Its end == point AND it has inclusive end boundary
+            // Since we don't track individual boundary types in max_end, we must be conservative
+            if left.max_end > point || (left.max_end == point && left.could_have_inclusive_end()) {
                 left.search_point(point, result);
             }
         }
         
-        // Search right subtree if the point is not before this interval's start
+        // Search right subtree if the point could overlap with intervals starting at or after this node's begin
         if let Some(ref right) = self.right {
-            if point >= self.interval.begin {
+            // An interval in the right subtree can contain the point if:
+            // 1. Its begin < point (since we know point >= self.interval.begin from BST property), OR
+            // 2. Its begin == point AND it has inclusive start boundary
+            if point > self.interval.begin || (point == self.interval.begin && self.interval.start_inclusive) {
                 right.search_point(point, result);
             }
         }
     }
 
+    /// Helper method to check if this subtree could have intervals with inclusive end boundaries
+    fn could_have_inclusive_end(&self) -> bool {
+        // Check this node's interval
+        if self.interval.end_inclusive {
+            return true;
+        }
+        
+        // Recursively check children
+        if let Some(ref left) = self.left {
+            if left.could_have_inclusive_end() {
+                return true;
+            }
+        }
+        
+        if let Some(ref right) = self.right {
+            if right.could_have_inclusive_end() {
+                return true;
+            }
+        }
+        
+        false
+    }
+
     /// Searches for all intervals overlapping with a given range [start, end).
+    /// Note: The search range is assumed to be [start, end) (start inclusive, end exclusive)
+    /// unless specified otherwise.
     pub fn search_range(&self, start: f64, end: f64, result: &mut Vec<Arc<Interval>>) {
         if self.interval.overlaps_range(start, end) {
             result.push(self.interval.clone());
@@ -92,13 +124,18 @@ impl IntervalNode {
 
         // Search left subtree if it might contain overlapping intervals
         if let Some(ref left) = self.left {
-            if left.max_end > start {
+            // An interval in the left subtree can overlap [start, end) if its end > start
+            // OR if its end == start and it has inclusive end boundary
+            if left.max_end > start || (left.max_end == start && left.could_have_inclusive_end()) {
                 left.search_range(start, end, result);
             }
         }
 
-        // Search right subtree if the query range extends past this interval's start
+        // Search right subtree if intervals starting at or after this node could overlap the range
         if let Some(ref right) = self.right {
+            // An interval in the right subtree can overlap [start, end) if its begin < end
+            // Since all intervals in right subtree have begin >= self.interval.begin,
+            // we only need to check if self.interval.begin < end
             if self.interval.begin < end {
                 right.search_range(start, end, result);
             }
@@ -144,22 +181,33 @@ impl IntervalNode {
     }
 
     /// Search for intervals that are enveloped by a range [start, end)
+    /// Note: The enveloping range is assumed to be [start, end) unless specified otherwise
     pub fn search_enveloped(&self, start: f64, end: f64, result: &mut Vec<Arc<Interval>>) {
-        // An interval is enveloped if it's completely contained within [start, end)
-        if self.interval.begin >= start && self.interval.end <= end {
+        // An interval is enveloped by [start, end) if:
+        // - interval.begin >= start (respecting start boundary inclusivity)  
+        // - interval.end <= end (respecting end boundary exclusivity)
+        // But we need to be careful about the interval's own boundary inclusivity
+        if self.interval.enveloped_by(start, end) {
             result.push(self.interval.clone());
         }
 
         // Search left subtree if it might contain enveloped intervals
         if let Some(ref left) = self.left {
-            if left.max_end > start {
+            // Left subtree intervals can be enveloped if their max_end <= end
+            if left.max_end <= end {
+                left.search_enveloped(start, end, result);
+            } else if left.max_end > start {
+                // Even if max_end > end, some intervals might still be enveloped
                 left.search_enveloped(start, end, result);
             }
         }
 
         // Search right subtree if it might contain enveloped intervals  
         if let Some(ref right) = self.right {
-            if self.interval.begin < end {
+            // Right subtree intervals can be enveloped if their begins are >= start
+            // Since all right subtree intervals have begin >= self.interval.begin,
+            // we need self.interval.begin >= start for any to be enveloped
+            if self.interval.begin >= start {
                 right.search_enveloped(start, end, result);
             }
         }
@@ -298,13 +346,13 @@ impl IntervalNode {
         }
         
         if let Some(ref left) = self.left {
-            if left.max_end > point {
+            if left.max_end > point || (left.max_end == point && left.could_have_inclusive_end()) {
                 left.collect_overlapping_point(point, result);
             }
         }
         
         if let Some(ref right) = self.right {
-            if point >= self.interval.begin {
+            if point > self.interval.begin || (point == self.interval.begin && self.interval.start_inclusive) {
                 right.collect_overlapping_point(point, result);
             }
         }
@@ -317,7 +365,7 @@ impl IntervalNode {
         }
 
         if let Some(ref left) = self.left {
-            if left.max_end > start {
+            if left.max_end > start || (left.max_end == start && left.could_have_inclusive_end()) {
                 left.collect_overlapping_range(start, end, result);
             }
         }

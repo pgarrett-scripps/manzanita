@@ -1115,14 +1115,16 @@ impl IntervalTree {
         for interval in intervals.into_iter().skip(1) {
             let last_in_group = &current_group[current_group.len() - 1];
             
-            // Check if intervals overlap
-            let overlaps = if strict {
+            // Check if intervals overlap or are adjacent based on boundary inclusivity
+            let overlaps_or_adjacent = if strict {
+                // Only merge if they actually overlap
                 last_in_group.overlaps_interval(&interval)
             } else {
-                last_in_group.end >= interval.begin
+                // Merge if they overlap OR are adjacent (touching boundaries)
+                last_in_group.overlaps_interval(&interval) || intervals_are_adjacent(last_in_group, &interval)
             };
             
-            if overlaps {
+            if overlaps_or_adjacent {
                 current_group.push(interval);
             } else {
                 // Merge current group and start new one
@@ -1211,9 +1213,18 @@ impl IntervalTree {
         for interval in intervals.into_iter().skip(1) {
             let last_in_group = &current_group[current_group.len() - 1];
             
-            // Check if intervals are adjacent or overlapping
-            let distance = interval.begin - last_in_group.end;
-            let should_merge = distance <= max_dist || (merge_overlaps && last_in_group.overlaps_interval(&interval));
+            // Calculate distance between intervals considering boundary inclusivity
+            let distance = if last_in_group.end_inclusive && interval.start_inclusive {
+                // If both boundaries are inclusive, touching intervals have distance 0
+                (interval.begin - last_in_group.end).abs()
+            } else {
+                // Otherwise, use the actual distance
+                interval.begin - last_in_group.end
+            };
+            
+            let should_merge = distance <= max_dist || 
+                              (merge_overlaps && last_in_group.overlaps_interval(&interval)) ||
+                              (!merge_overlaps && intervals_are_adjacent(last_in_group, &interval));
             
             if should_merge {
                 current_group.push(interval);
@@ -1280,6 +1291,13 @@ fn intervals_equal(a: &Interval, b: &Interval) -> bool {
     })
 }
 
+/// Helper function to check if two intervals are adjacent (touching boundaries)
+fn intervals_are_adjacent(a: &Interval, b: &Interval) -> bool {
+    // Intervals are adjacent if one ends where the other begins, and at least one boundary is inclusive
+    (a.end == b.begin && (a.end_inclusive || b.start_inclusive)) ||
+    (b.end == a.begin && (b.end_inclusive || a.start_inclusive))
+}
+
 /// Helper function to merge a group of intervals
 fn merge_interval_group(intervals: &[Interval], datafunc: Option<&PyObject>) -> PyResult<Interval> {
     if intervals.is_empty() {
@@ -1294,9 +1312,16 @@ fn merge_interval_group(intervals: &[Interval], datafunc: Option<&PyObject>) -> 
     let min_begin = intervals.iter().map(|iv| iv.begin).fold(f64::INFINITY, f64::min);
     let max_end = intervals.iter().map(|iv| iv.end).fold(f64::NEG_INFINITY, f64::max);
     
-    // Determine boundary inclusivity (use first interval's settings as default)
-    let start_inclusive = intervals[0].start_inclusive;
-    let end_inclusive = intervals[0].end_inclusive;
+    // Determine boundary inclusivity for the merged interval
+    // Start: inclusive if any of the intervals with min_begin are start_inclusive
+    // End: inclusive if any of the intervals with max_end are end_inclusive
+    let start_inclusive = intervals.iter()
+        .filter(|iv| iv.begin == min_begin)
+        .any(|iv| iv.start_inclusive);
+    
+    let end_inclusive = intervals.iter()
+        .filter(|iv| iv.end == max_end)
+        .any(|iv| iv.end_inclusive);
     
     // Merge data
     let merged_data = if let Some(func) = datafunc {
