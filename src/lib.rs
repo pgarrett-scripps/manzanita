@@ -11,6 +11,7 @@
 //! - Memory-efficient implementation using Arc for shared interval data
 //! - Comprehensive interval operations: add, remove, query, envelop
 //! - Python-compatible iteration and containment checking
+//! - Advanced restructuring operations: split, merge, chop, slice
 //!
 //! # Example
 //! ```python
@@ -29,6 +30,11 @@
 //! # Check containment
 //! if Interval(1.0, 5.0, "data1") in tree:
 //!     print("Found!")
+//! 
+//! # Advanced operations
+//! tree.split_overlaps()  # Split at all boundary points
+//! tree.merge_overlaps()  # Merge overlapping intervals
+//! tree.chop(2.0, 4.0)    # Remove intervals in range
 //! ```
 
 use pyo3::prelude::*;

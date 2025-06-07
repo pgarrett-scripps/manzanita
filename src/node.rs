@@ -12,6 +12,7 @@ use std::sync::Arc;
 /// 
 /// Each node contains an interval and maintains the maximum end value 
 /// of all intervals in its subtree for efficient pruning during searches.
+#[derive(Clone)]
 pub(crate) struct IntervalNode {
     pub interval: Arc<Interval>,
     pub max_end: f64,

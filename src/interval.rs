@@ -121,6 +121,55 @@ impl Interval {
         this_starts_before_other_ends && other_starts_before_this_ends
     }
 
+    /// Checks if this interval overlaps with another interval.
+    /// 
+    /// Returns `true` if the intervals overlap based on their boundary inclusivity.
+    pub fn overlaps_interval(&self, other: &Interval) -> bool {
+        // Two intervals overlap if one starts before the other ends
+        let self_starts_before_other_ends = if self.start_inclusive && other.end_inclusive {
+            self.begin <= other.end
+        } else {
+            self.begin < other.end
+        };
+        
+        let other_starts_before_self_ends = if other.start_inclusive && self.end_inclusive {
+            other.begin <= self.end
+        } else {
+            other.begin < self.end
+        };
+        
+        self_starts_before_other_ends && other_starts_before_self_ends
+    }
+
+    /// Checks if this interval is completely contained within another interval.
+    /// 
+    /// Returns `true` if this interval is enveloped by the other interval.
+    pub fn enveloped_by_interval(&self, other: &Interval) -> bool {
+        let start_contained = if other.start_inclusive {
+            other.begin <= self.begin
+        } else {
+            other.begin < self.begin
+        };
+        
+        let end_contained = if other.end_inclusive {
+            self.end <= other.end
+        } else {
+            self.end < other.end
+        };
+        
+        start_contained && end_contained
+    }
+
+    /// Returns the length/span of the interval.
+    pub fn length(&self) -> f64 {
+        self.end - self.begin
+    }
+
+    /// Checks if this interval is null (zero length).
+    pub fn is_null(&self) -> bool {
+        self.begin == self.end
+    }
+
     /// String representation of the interval.
     fn __repr__(&self, py: Python) -> PyResult<String> {
         let data_str = self.data.as_ref(py).str()?.to_str()?;
@@ -170,6 +219,8 @@ impl Interval {
             
             Ok(self.begin == other_interval.begin && 
                self.end == other_interval.end && 
+               self.start_inclusive == other_interval.start_inclusive &&
+               self.end_inclusive == other_interval.end_inclusive &&
                data_equal)
         } else {
             Ok(false)
