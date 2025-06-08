@@ -106,14 +106,13 @@ impl IntervalTree {
             if len == 2 {
                 let begin: f64 = tuple.get_item(0)?.extract()?;
                 let end: f64 = tuple.get_item(1)?.extract()?;
-                let data = Python::with_gil(|py| py.None());
-                let interval = Interval::new(begin, end, data, Some(start_inclusive), Some(end_inclusive))?;
+                let interval = Interval::new(begin, end, None, Some(start_inclusive), Some(end_inclusive))?;
                 tree.add(interval);
             } else if len == 3 {
                 let begin: f64 = tuple.get_item(0)?.extract()?;
                 let end: f64 = tuple.get_item(1)?.extract()?;
                 let data = tuple.get_item(2)?.to_object(tuple.py());
-                let interval = Interval::new(begin, end, data, Some(start_inclusive), Some(end_inclusive))?;
+                let interval = Interval::new(begin, end, Some(data), Some(start_inclusive), Some(end_inclusive))?;
                 tree.add(interval);
             } else {
                 return Err(PyTypeError::new_err("Tuples must have 2 or 3 elements"));
@@ -142,14 +141,15 @@ impl IntervalTree {
     /// Adds an interval to the tree using individual parameters.
     /// 
     /// # Arguments
-    /// * `begin` - The start of the interval (inclusive)
-    /// * `end` - The end of the interval (exclusive)
-    /// * `data` - Associated data for this interval
+    /// * `begin` - The start of the interval
+    /// * `end` - The end of the interval
+    /// * `data` - Associated data for this interval (default: None)
     /// 
     /// # Performance
     /// Average time complexity: O(log n)
     /// Worst case time complexity: O(n) for a degenerate tree
-    pub fn addi(&mut self, begin: f64, end: f64, data: PyObject) -> PyResult<()> {
+    #[pyo3(signature = (begin, end, data=None))]
+    pub fn addi(&mut self, begin: f64, end: f64, data: Option<PyObject>) -> PyResult<()> {
         let interval = Interval::new(begin, end, data, Some(self.start_inclusive), Some(self.end_inclusive))?;
         self.add(interval);
         Ok(())
@@ -181,8 +181,8 @@ impl IntervalTree {
     /// Queries for all intervals that overlap with a given range [start, end).
     /// 
     /// # Arguments
-    /// * `start` - The start of the query range (inclusive)
-    /// * `end` - The end of the query range (exclusive)
+    /// * `start` - The start of the query range
+    /// * `end` - The end of the query range
     /// 
     /// # Returns
     /// A vector of intervals that overlap with the given range
@@ -248,11 +248,12 @@ impl IntervalTree {
     /// # Arguments
     /// * `begin` - The start of the interval
     /// * `end` - The end of the interval
-    /// * `data` - The data associated with the interval
+    /// * `data` - The data associated with the interval (default: None)
     /// 
     /// # Returns
     /// `True` if the interval is in the tree, `False` otherwise
-    pub fn containsi(&self, begin: f64, end: f64, data: PyObject) -> PyResult<bool> {
+    #[pyo3(signature = (begin, end, data=None))]
+    pub fn containsi(&self, begin: f64, end: f64, data: Option<PyObject>) -> PyResult<bool> {
         let interval = Interval::new(begin, end, data, Some(self.start_inclusive), Some(self.end_inclusive))?;
         Ok(self.__contains__(interval))
     }
@@ -374,13 +375,13 @@ impl IntervalTree {
             let stop = slice.getattr("stop")?.extract::<Option<f64>>()?
                 .ok_or_else(|| PyTypeError::new_err("Slice stop cannot be None"))?;
             
-            let interval = Interval::new(start, stop, data, Some(self.start_inclusive), Some(self.end_inclusive))?;
+            let interval = Interval::new(start, stop, Some(data), Some(self.start_inclusive), Some(self.end_inclusive))?;
             self.add(interval);
             Ok(())
         } else if let Ok(point) = idx.extract::<f64>() {
             // Create a point interval with minimal width
             let epsilon = f64::EPSILON.max(point.abs() * f64::EPSILON);
-            let interval = Interval::new(point, point + epsilon, data, Some(self.start_inclusive), Some(self.end_inclusive))?;
+            let interval = Interval::new(point, point + epsilon, Some(data), Some(self.start_inclusive), Some(self.end_inclusive))?;
             self.add(interval);
             Ok(())
         } else {
@@ -423,11 +424,12 @@ impl IntervalTree {
     /// # Arguments
     /// * `begin` - The start of the interval
     /// * `end` - The end of the interval
-    /// * `data` - The data associated with the interval
+    /// * `data` - The data associated with the interval (default: None)
     /// 
     /// # Errors
     /// Raises `ValueError` if the interval is not present in the tree
-    pub fn removei(&mut self, begin: f64, end: f64, data: PyObject) -> PyResult<()> {
+    #[pyo3(signature = (begin, end, data=None))]
+    pub fn removei(&mut self, begin: f64, end: f64, data: Option<PyObject>) -> PyResult<()> {
         let interval = Interval::new(begin, end, data, Some(self.start_inclusive), Some(self.end_inclusive))?;
         self.remove(interval)
     }
@@ -437,10 +439,11 @@ impl IntervalTree {
     /// # Arguments
     /// * `begin` - The start of the interval
     /// * `end` - The end of the interval
-    /// * `data` - The data associated with the interval
+    /// * `data` - The data associated with the interval (default: None)
     /// 
     /// Does nothing if the interval is not present (no error raised)
-    pub fn discardi(&mut self, begin: f64, end: f64, data: PyObject) -> PyResult<()> {
+    #[pyo3(signature = (begin, end, data=None))]
+    pub fn discardi(&mut self, begin: f64, end: f64, data: Option<PyObject>) -> PyResult<()> {
         let interval = Interval::new(begin, end, data, Some(self.start_inclusive), Some(self.end_inclusive))?;
         self.discard(interval);
         Ok(())
@@ -478,24 +481,33 @@ impl IntervalTree {
         self.root = None;
     }
 
-    /// Supports deletion with `del tree[point]` and `del tree[start:end]` syntax.
+    /// Removes and returns an arbitrary interval from the tree.
     /// 
-    /// # Arguments
-    /// * `idx` - Either a float (for point deletion) or a slice (for range deletion)
-    fn __delitem__(&mut self, idx: &PyAny) -> PyResult<()> {
-        if let Ok(point) = idx.extract::<f64>() {
-            self.remove_overlap(point, None);
-            Ok(())
-        } else if let Ok(slice) = idx.downcast::<PySlice>() {
-            let start = slice.getattr("start")?.extract::<Option<f64>>()?
-                .ok_or_else(|| PyTypeError::new_err("Slice start cannot be None"))?;
-            let stop = slice.getattr("stop")?.extract::<Option<f64>>()?
-                .ok_or_else(|| PyTypeError::new_err("Slice stop cannot be None"))?;
+    /// This method removes and returns an arbitrary interval from the tree. 
+    /// The specific interval returned is implementation-dependent and should not be relied upon.
+    /// 
+    /// # Returns
+    /// The removed interval
+    /// 
+    /// # Errors
+    /// Raises `PyValueError` if the tree is empty
+    /// 
+    /// # Examples
+    /// ```python
+    /// tree = IntervalTree([Interval(1, 3), Interval(2, 4)])
+    /// interval = tree.pop()  # Returns and removes one of the intervals
+    /// ```
+    pub fn pop(&mut self) -> PyResult<Interval> {
+        if let Some(root) = self.root.take() {
+            // Get an arbitrary interval (we'll use the root interval)
+            let popped_interval = (*root.interval).clone();
             
-            self.remove_overlap(start, Some(stop));
-            Ok(())
+            // Remove that specific interval from the tree
+            self.root = root.remove(&popped_interval);
+            
+            Ok(popped_interval)
         } else {
-            Err(PyTypeError::new_err("Index must be a number or slice"))
+            Err(PyValueError::new_err("pop from empty IntervalTree"))
         }
     }
 
@@ -929,7 +941,7 @@ impl IntervalTree {
                 let left_interval = Interval::new(
                     interval.begin,
                     begin,
-                    new_data,
+                    Some(new_data),
                     Some(interval.start_inclusive),
                     Some(false), // End is always exclusive at the chop point
                 )?;
@@ -950,7 +962,7 @@ impl IntervalTree {
                 let right_interval = Interval::new(
                     end,
                     interval.end,
-                    new_data,
+                    Some(new_data),
                     Some(true), // Start is always inclusive at the chop point
                     Some(interval.end_inclusive),
                 )?;
@@ -1005,7 +1017,7 @@ impl IntervalTree {
                 let left_interval = Interval::new(
                     interval.begin,
                     point,
-                    left_data,
+                    Some(left_data),
                     Some(interval.start_inclusive),
                     Some(false), // Split point is exclusive on left side
                 )?;
@@ -1024,7 +1036,7 @@ impl IntervalTree {
                 let right_interval = Interval::new(
                     point,
                     interval.end,
-                    right_data,
+                    Some(right_data),
                     Some(true), // Split point is inclusive on right side
                     Some(interval.end_inclusive),
                 )?;
@@ -1249,6 +1261,201 @@ impl IntervalTree {
         
         Ok(())
     }
+
+    /// Returns a number between 0 and 1, indicating how suboptimal the tree is.
+    /// 
+    /// The lower the score, the better the tree structure. This number roughly represents
+    /// the fraction of flawed intervals in the tree.
+    /// 
+    /// # Arguments
+    /// * `full_report` - If true, returns a detailed report as a dictionary (default: false)
+    /// 
+    /// # Returns
+    /// Either a float score (0.0 to 1.0) or a dictionary with detailed metrics
+    /// 
+    /// # Examples
+    /// ```python
+    /// tree = IntervalTree([Interval(1, 3), Interval(2, 4)])
+    /// score = tree.score()  # Returns float between 0.0 and 1.0
+    /// report = tree.score(full_report=True)  # Returns detailed dict
+    /// ```
+    #[pyo3(signature = (full_report=false))]
+    pub fn score(&self, full_report: Option<bool>) -> PyResult<PyObject> {
+        let full_report = full_report.unwrap_or(false);
+        
+        let n = self.__len__();
+        if n <= 2 {
+            return Python::with_gil(|py| {
+                if full_report {
+                    let report = pyo3::types::PyDict::new(py);
+                    report.set_item("depth", 0.0)?;
+                    report.set_item("s_center", 0.0)?;
+                    report.set_item("_cumulative", 0.0)?;
+                    Ok(report.into())
+                } else {
+                    Ok(0.0f64.into_py(py))
+                }
+            });
+        }
+        
+        let m = if let Some(ref root) = self.root {
+            root.count_nodes()
+        } else {
+            0
+        };
+        
+        // Calculate s_center score
+        let s_center_score = {
+            let raw = n.saturating_sub(m);
+            let maximum = n.saturating_sub(1);
+            if maximum == 0 {
+                0.0
+            } else {
+                raw as f64 / maximum as f64
+            }
+        };
+        
+        // Calculate depth score
+        let depth_score = if let Some(ref root) = self.root {
+            root.depth_score(n, m)
+        } else {
+            0.0
+        };
+        
+        let cumulative = depth_score.max(s_center_score);
+        
+        Python::with_gil(|py| {
+            if full_report {
+                let report = pyo3::types::PyDict::new(py);
+                report.set_item("depth", depth_score)?;
+                report.set_item("s_center", s_center_score)?;
+                report.set_item("_cumulative", cumulative)?;
+                Ok(report.into())
+            } else {
+                Ok(cumulative.into_py(py))
+            }
+        })
+    }
+
+    /// FOR DEBUGGING ONLY
+    /// Checks the tree to ensure that all invariants are held.
+    /// 
+    /// This method performs comprehensive validation of the tree structure,
+    /// including consistency checks between the tree nodes and internal data.
+    /// 
+    /// # Errors
+    /// Raises AssertionError if any invariant is violated
+    pub fn verify(&self) -> PyResult<()> {
+        if let Some(ref root) = self.root {
+            // Check that all intervals in tree are valid Interval objects
+            let all_intervals = self.items();
+            for interval in &all_intervals {
+                // Check that it's a valid interval (begin <= end)
+                if interval.begin > interval.end {
+                    return Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(
+                        format!("Error: Invalid interval found: begin ({}) > end ({})", 
+                               interval.begin, interval.end)
+                    ));
+                }
+                
+                // Check for null intervals (begin == end)
+                if interval.is_null() {
+                    return Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(
+                        format!("Error: Null Interval objects not allowed in IntervalTree: Interval({}, {})", 
+                               interval.begin, interval.end)
+                    ));
+                }
+            }
+            
+            // Verify internal tree structure
+            let mut visited = std::collections::HashSet::new();
+            root.verify_subtree(&mut visited)?;
+            
+            // Verify that tree contains exactly the intervals we expect
+            let tree_intervals = self.items();
+            let tree_count = tree_intervals.len();
+            let node_count = root.count_intervals();
+            
+            if tree_count != node_count {
+                return Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(
+                    format!("Error: Tree interval count mismatch! Tree reports {} intervals but nodes contain {}",
+                           tree_count, node_count)
+                ));
+            }
+            
+            // Verify BST property: left subtree intervals have begin <= root.begin, 
+            // right subtree intervals have begin >= root.begin
+            Self::verify_bst_property_recursive(root, f64::NEG_INFINITY, f64::INFINITY)?;
+            
+            // Verify max_end properties are correct
+            Self::verify_max_end_property_recursive(root)?;
+            
+        } else {
+            // Verify empty tree
+            if !self.is_empty() {
+                return Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(
+                    "Error: Tree reports non-empty but root is None!"
+                ));
+            }
+        }
+        
+        Ok(())
+    }
+}
+
+impl IntervalTree {
+    /// Recursive helper to verify BST property for a node
+    fn verify_bst_property_recursive(node: &IntervalNode, min_begin: f64, max_begin: f64) -> PyResult<()> {
+        // Check that this node's interval.begin is within the allowed range
+        if node.interval.begin < min_begin || node.interval.begin > max_begin {
+            return Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(
+                format!("Error: BST property violated! Node interval.begin={} not in range [{}, {}]",
+                       node.interval.begin, min_begin, max_begin)
+            ));
+        }
+        
+        // Recursively check left subtree (should have begin <= this.begin)
+        if let Some(ref left) = node.left {
+            Self::verify_bst_property_recursive(left, min_begin, node.interval.begin)?;
+        }
+        
+        // Recursively check right subtree (should have begin >= this.begin)
+        if let Some(ref right) = node.right {
+            Self::verify_bst_property_recursive(right, node.interval.begin, max_begin)?;
+        }
+        
+        Ok(())
+    }
+
+    /// Recursive helper to verify max_end property for a node
+    fn verify_max_end_property_recursive(node: &IntervalNode) -> PyResult<()> {
+        // Calculate what max_end should be
+        let mut expected_max_end = node.interval.end;
+        
+        if let Some(ref left) = node.left {
+            Self::verify_max_end_property_recursive(left)?;
+            if left.max_end > expected_max_end {
+                expected_max_end = left.max_end;
+            }
+        }
+        
+        if let Some(ref right) = node.right {
+            Self::verify_max_end_property_recursive(right)?;
+            if right.max_end > expected_max_end {
+                expected_max_end = right.max_end;
+            }
+        }
+        
+        // Check that stored max_end matches calculated value
+        if (node.max_end - expected_max_end).abs() > f64::EPSILON {
+            return Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(
+                format!("Error: max_end property violated! Node has max_end={} but should be {}",
+                       node.max_end, expected_max_end)
+            ));
+        }
+        
+        Ok(())
+    }
 }
 
 /// Python iterator for the IntervalTree.
@@ -1338,5 +1545,5 @@ fn merge_interval_group(intervals: &[Interval], datafunc: Option<&PyObject>) -> 
         intervals[0].data.clone()
     };
     
-    Interval::new(min_begin, max_end, merged_data, Some(start_inclusive), Some(end_inclusive))
+    Interval::new(min_begin, max_end, Some(merged_data), Some(start_inclusive), Some(end_inclusive))
 }

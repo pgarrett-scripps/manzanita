@@ -59,20 +59,23 @@ impl Interval {
     /// # Arguments
     /// * `begin` - The start of the interval
     /// * `end` - The end of the interval
-    /// * `data` - Associated data for this interval
+    /// * `data` - Associated data for this interval (default: None)
     /// * `start_inclusive` - Whether the start boundary is inclusive (default: true)
     /// * `end_inclusive` - Whether the end boundary is inclusive (default: false)
     /// 
     /// # Errors
     /// Returns a `PyTypeError` if `begin > end`.
     #[new]
-    #[pyo3(signature = (begin, end, data, start_inclusive=true, end_inclusive=false))]
-    pub fn new(begin: f64, end: f64, data: PyObject, start_inclusive: Option<bool>, end_inclusive: Option<bool>) -> PyResult<Self> {
-        if begin > end {
-            return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                format!("Invalid interval: begin ({}) must be <= end ({})", begin, end)
+    #[pyo3(signature = (begin, end, data=None, start_inclusive=true, end_inclusive=false))]
+    pub fn new(begin: f64, end: f64, data: Option<PyObject>, start_inclusive: Option<bool>, end_inclusive: Option<bool>) -> PyResult<Self> {
+        if begin >= end {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                format!("Invalid interval: begin ({}) must be < end ({})", begin, end)
             ));
         }
+        
+        let data = data.unwrap_or_else(|| Python::with_gil(|py| py.None()));
+        
         Ok(Interval { 
             begin, 
             end, 
@@ -249,6 +252,39 @@ impl Interval {
         Ok(begin_hash.wrapping_mul(31)
             .wrapping_add(end_hash.wrapping_mul(31))
             .wrapping_add(data_hash))
+    }
+
+    /// Rich comparison method for intervals.
+    /// 
+    /// Intervals are ordered first by begin, then by end.
+    fn __richcmp__(&self, other: &PyAny, op: pyo3::basic::CompareOp) -> PyResult<PyObject> {
+        use pyo3::basic::CompareOp;
+        
+        if let Ok(other_interval) = other.extract::<Interval>() {
+            let result = match op {
+                CompareOp::Lt => self.begin < other_interval.begin || 
+                                (self.begin == other_interval.begin && self.end < other_interval.end),
+                CompareOp::Le => self.begin < other_interval.begin || 
+                                (self.begin == other_interval.begin && self.end <= other_interval.end),
+                CompareOp::Eq => self.__eq__(other)?,
+                CompareOp::Ne => !self.__eq__(other)?,
+                CompareOp::Gt => self.begin > other_interval.begin || 
+                                (self.begin == other_interval.begin && self.end > other_interval.end),
+                CompareOp::Ge => self.begin > other_interval.begin || 
+                                (self.begin == other_interval.begin && self.end >= other_interval.end),
+            };
+            
+            Python::with_gil(|py| Ok(result.into_py(py)))
+        } else {
+            // Can't compare with non-Interval types for ordering
+            match op {
+                CompareOp::Eq => Ok(false.into_py(other.py())),
+                CompareOp::Ne => Ok(true.into_py(other.py())),
+                _ => Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                    "Intervals can only be compared with other Intervals"
+                )),
+            }
+        }
     }
 
     /// Checks if this interval is enveloped by a range.

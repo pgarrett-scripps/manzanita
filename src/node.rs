@@ -32,23 +32,16 @@ impl IntervalNode {
         }
     }
 
-    /// Updates the max_end value based on the current node and its children.
-    /// This optimization allows for efficient search pruning.
-    pub fn update_max_end(&mut self) {
-        self.max_end = self.interval.end;
-        
-        if let Some(ref left) = self.left {
-            self.max_end = self.max_end.max(left.max_end);
-        }
-        
-        if let Some(ref right) = self.right {
-            self.max_end = self.max_end.max(right.max_end);
-        }
-    }
-
     /// Inserts a new interval into the tree using BST ordering on begin values.
     pub fn insert(&mut self, interval: Arc<Interval>) {
-        if interval.begin < self.interval.begin {
+        // Add safety check to prevent infinite recursion with NaN values
+        if interval.begin.is_nan() || interval.end.is_nan() {
+            return;
+        }
+        
+        // Use a more robust comparison to handle floating point edge cases
+        if interval.begin < self.interval.begin || 
+           (interval.begin == self.interval.begin && interval.end < self.interval.end) {
             match &mut self.left {
                 Some(left) => left.insert(interval),
                 None => self.left = Some(Box::new(IntervalNode::new(interval))),
@@ -60,6 +53,24 @@ impl IntervalNode {
             }
         }
         self.update_max_end();
+    }
+
+    /// Updates the max_end value based on the current node and its children.
+    /// This optimization allows for efficient search pruning.
+    pub fn update_max_end(&mut self) {
+        self.max_end = self.interval.end;
+        
+        if let Some(ref left) = self.left {
+            if left.max_end.is_finite() && left.max_end > self.max_end {
+                self.max_end = left.max_end;
+            }
+        }
+        
+        if let Some(ref right) = self.right {
+            if right.max_end.is_finite() && right.max_end > self.max_end {
+                self.max_end = right.max_end;
+            }
+        }
     }
 
     /// Searches for all intervals overlapping with a given point.
@@ -157,6 +168,56 @@ impl IntervalNode {
     pub fn count_intervals(&self) -> usize {
         1 + self.left.as_ref().map_or(0, |node| node.count_intervals())
           + self.right.as_ref().map_or(0, |node| node.count_intervals())
+    }
+
+    /// Counts the total number of nodes in the subtree rooted at this node
+    pub fn count_nodes(&self) -> usize {
+        let mut count = 1; // Count this node
+        
+        if let Some(ref left) = self.left {
+            count += left.count_nodes();
+        }
+        
+        if let Some(ref right) = self.right {
+            count += right.count_nodes();
+        }
+        
+        count
+    }
+    
+    /// Calculates the depth score for tree optimality analysis
+    /// 
+    /// Returns a normalized score indicating how balanced the tree is.
+    /// A perfectly balanced tree returns 0.0, while a degenerate tree returns 1.0.
+    pub fn depth_score(&self, n: usize, _m: usize) -> f64 {
+        if n <= 1 {
+            return 0.0;
+        }
+        
+        let actual_depth = self.max_depth();
+        let optimal_depth = (n as f64).log2().ceil() as usize;
+        let worst_depth = n; // Completely degenerate tree
+        
+        if worst_depth <= optimal_depth {
+            return 0.0;
+        }
+        
+        let raw_score = actual_depth.saturating_sub(optimal_depth);
+        let max_possible = worst_depth.saturating_sub(optimal_depth);
+        
+        if max_possible == 0 {
+            0.0
+        } else {
+            (raw_score as f64) / (max_possible as f64)
+        }
+    }
+    
+    /// Calculates the maximum depth of the subtree rooted at this node
+    fn max_depth(&self) -> usize {
+        let left_depth = self.left.as_ref().map_or(0, |node| node.max_depth());
+        let right_depth = self.right.as_ref().map_or(0, |node| node.max_depth());
+        
+        1 + left_depth.max(right_depth)
     }
 
     /// Helper to check if two intervals have equal data (Python object comparison is complex)
@@ -394,5 +455,46 @@ impl IntervalNode {
                 right.collect_enveloped(start, end, result);
             }
         }
+    }
+
+    /// Verifies that this node and its subtree maintain interval tree invariants
+    /// 
+    /// This is used internally by the tree's verify() method for debugging.
+    pub fn verify_subtree(&self, visited: &mut std::collections::HashSet<*const IntervalNode>) -> PyResult<()> {
+        // Check for cycles (shouldn't happen but good to verify)
+        let node_ptr = self as *const IntervalNode;
+        if visited.contains(&node_ptr) {
+            return Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(
+                "Error: Cycle detected in tree structure!"
+            ));
+        }
+        visited.insert(node_ptr);
+        
+        // Verify interval is valid
+        if self.interval.begin > self.interval.end {
+            return Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(
+                format!("Error: Invalid interval in node: begin={} > end={}", 
+                       self.interval.begin, self.interval.end)
+            ));
+        }
+        
+        // Verify max_end is at least this interval's end
+        if self.max_end < self.interval.end {
+            return Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(
+                format!("Error: max_end={} < interval.end={}", 
+                       self.max_end, self.interval.end)
+            ));
+        }
+        
+        // Recursively verify children
+        if let Some(ref left) = self.left {
+            left.verify_subtree(visited)?;
+        }
+        
+        if let Some(ref right) = self.right {
+            right.verify_subtree(visited)?;
+        }
+        
+        Ok(())
     }
 }

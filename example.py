@@ -3,11 +3,18 @@ from manzanita import Interval, IntervalTree
 # Create a new IntervalTree
 tree = IntervalTree()
 
+# Create intervals without data (will default to None)
+Interval(1.0, 5.5)
+
 # Add intervals to the tree
 tree.add(Interval(1.0, 5.5, "data1"))
 tree.add(Interval(1.0, 5.5, "data1"))
 tree.add(Interval(3.3, 7.7, "data2"))
 tree.add(Interval(6.6, 9.9, "data3"))
+
+# Also works without data parameter
+tree.add(Interval(0.5, 2.0))  # data will be None
+tree.add(Interval(8.0, 10.0))  # data will be None
 
 # Query intervals overlapping a point
 print("Intervals at point 4.4:")
@@ -40,3 +47,8 @@ print(f"\nNumber of intervals in the tree: {len(tree)}")
 iv = Interval(10.0, 15.5, "data4")
 begin, end, data = iv
 print(f"\nUnpacked interval: begin={begin}, end={end}, data={data}")
+
+# Examples without data
+iv_no_data = Interval(20.0, 25.0)  # data defaults to None
+begin, end, data = iv_no_data
+print(f"Interval without data: begin={begin}, end={end}, data={data}")
