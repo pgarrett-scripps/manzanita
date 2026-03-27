@@ -9,8 +9,8 @@ use pyo3::prelude::*;
 use std::sync::Arc;
 
 /// Node structure for an Interval Tree node.
-/// 
-/// Each node contains an interval and maintains the maximum end value 
+///
+/// Each node contains an interval and maintains the maximum end value
 /// of all intervals in its subtree for efficient pruning during searches.
 #[derive(Clone)]
 pub(crate) struct IntervalNode {
@@ -38,10 +38,11 @@ impl IntervalNode {
         if interval.begin.is_nan() || interval.end.is_nan() {
             return;
         }
-        
+
         // Use a more robust comparison to handle floating point edge cases
-        if interval.begin < self.interval.begin || 
-           (interval.begin == self.interval.begin && interval.end < self.interval.end) {
+        if interval.begin < self.interval.begin
+            || (interval.begin == self.interval.begin && interval.end < self.interval.end)
+        {
             match &mut self.left {
                 Some(left) => left.insert(interval),
                 None => self.left = Some(Box::new(IntervalNode::new(interval))),
@@ -59,13 +60,13 @@ impl IntervalNode {
     /// This optimization allows for efficient search pruning.
     pub fn update_max_end(&mut self) {
         self.max_end = self.interval.end;
-        
+
         if let Some(ref left) = self.left {
             if left.max_end.is_finite() && left.max_end > self.max_end {
                 self.max_end = left.max_end;
             }
         }
-        
+
         if let Some(ref right) = self.right {
             if right.max_end.is_finite() && right.max_end > self.max_end {
                 self.max_end = right.max_end;
@@ -79,7 +80,7 @@ impl IntervalNode {
         if self.interval.overlaps(point) {
             result.push(self.interval.clone());
         }
-        
+
         // Search left subtree if it might contain overlapping intervals
         if let Some(ref left) = self.left {
             // An interval in the left subtree can contain the point if:
@@ -90,13 +91,15 @@ impl IntervalNode {
                 left.search_point(point, result);
             }
         }
-        
+
         // Search right subtree if the point could overlap with intervals starting at or after this node's begin
         if let Some(ref right) = self.right {
             // An interval in the right subtree can contain the point if:
             // 1. Its begin < point (since we know point >= self.interval.begin from BST property), OR
             // 2. Its begin == point AND it has inclusive start boundary
-            if point > self.interval.begin || (point == self.interval.begin && self.interval.start_inclusive) {
+            if point > self.interval.begin
+                || (point == self.interval.begin && self.interval.start_inclusive)
+            {
                 right.search_point(point, result);
             }
         }
@@ -108,20 +111,20 @@ impl IntervalNode {
         if self.interval.end_inclusive {
             return true;
         }
-        
+
         // Recursively check children
         if let Some(ref left) = self.left {
             if left.could_have_inclusive_end() {
                 return true;
             }
         }
-        
+
         if let Some(ref right) = self.right {
             if right.could_have_inclusive_end() {
                 return true;
             }
         }
-        
+
         false
     }
 
@@ -167,85 +170,78 @@ impl IntervalNode {
     /// Efficiently counts the number of intervals in the tree.
     pub fn count_intervals(&self) -> usize {
         1 + self.left.as_ref().map_or(0, |node| node.count_intervals())
-          + self.right.as_ref().map_or(0, |node| node.count_intervals())
+            + self.right.as_ref().map_or(0, |node| node.count_intervals())
     }
 
     /// Counts the total number of nodes in the subtree rooted at this node
     pub fn count_nodes(&self) -> usize {
         let mut count = 1; // Count this node
-        
+
         if let Some(ref left) = self.left {
             count += left.count_nodes();
         }
-        
+
         if let Some(ref right) = self.right {
             count += right.count_nodes();
         }
-        
+
         count
     }
-    
+
     /// Calculates the depth score for tree optimality analysis
-    /// 
+    ///
     /// Returns a normalized score indicating how balanced the tree is.
     /// A perfectly balanced tree returns 0.0, while a degenerate tree returns 1.0.
     pub fn depth_score(&self, n: usize, _m: usize) -> f64 {
         if n <= 1 {
             return 0.0;
         }
-        
+
         let actual_depth = self.max_depth();
         let optimal_depth = (n as f64).log2().ceil() as usize;
         let worst_depth = n; // Completely degenerate tree
-        
+
         if worst_depth <= optimal_depth {
             return 0.0;
         }
-        
+
         let raw_score = actual_depth.saturating_sub(optimal_depth);
         let max_possible = worst_depth.saturating_sub(optimal_depth);
-        
+
         if max_possible == 0 {
             0.0
         } else {
             (raw_score as f64) / (max_possible as f64)
         }
     }
-    
+
     /// Calculates the maximum depth of the subtree rooted at this node
     fn max_depth(&self) -> usize {
         let left_depth = self.left.as_ref().map_or(0, |node| node.max_depth());
         let right_depth = self.right.as_ref().map_or(0, |node| node.max_depth());
-        
+
         1 + left_depth.max(right_depth)
     }
 
     /// Helper to check if two intervals have equal data (Python object comparison is complex)
     pub fn interval_data_equals(&self, a: &Arc<Interval>, b: &Arc<Interval>) -> bool {
         Python::with_gil(|py| {
-            match (a.data.as_ref(py).is(b.data.as_ref(py)), 
-                   a.data.as_ref(py).eq(&b.data.as_ref(py))) {
-                (true, _) => true,  // Same object
-                (false, Ok(true)) => true,  // Equal content
-                _ => false,  // Different or comparison failed
+            match (
+                a.data.as_ref(py).is(b.data.as_ref(py)),
+                a.data.as_ref(py).eq(b.data.as_ref(py)),
+            ) {
+                (true, _) => true,         // Same object
+                (false, Ok(true)) => true, // Equal content
+                _ => false,                // Different or comparison failed
             }
         })
-    }
-
-    /// Find the minimum (leftmost) interval in this subtree
-    fn find_min(&self) -> Arc<Interval> {
-        if let Some(ref left) = self.left {
-            left.find_min()
-        } else {
-            self.interval.clone()
-        }
     }
 
     /// Search for intervals that are enveloped by a range [start, end)
     /// Note: The enveloping range is assumed to be [start, end) unless specified otherwise
     pub fn search_enveloped(&self, start: f64, end: f64, result: &mut Vec<Arc<Interval>>) {
         // An interval is enveloped by [start, end) if:
-        // - interval.begin >= start (respecting start boundary inclusivity)  
+        // - interval.begin >= start (respecting start boundary inclusivity)
         // - interval.end <= end (respecting end boundary exclusivity)
         // But we need to be careful about the interval's own boundary inclusivity
         if self.interval.enveloped_by(start, end) {
@@ -263,7 +259,7 @@ impl IntervalNode {
             }
         }
 
-        // Search right subtree if it might contain enveloped intervals  
+        // Search right subtree if it might contain enveloped intervals
         if let Some(ref right) = self.right {
             // Right subtree intervals can be enveloped if their begins are >= start
             // Since all right subtree intervals have begin >= self.interval.begin,
@@ -276,14 +272,17 @@ impl IntervalNode {
 
     /// Check if a specific interval exists in the tree
     pub fn contains(&self, target: &Interval) -> bool {
-        if self.interval.begin == target.begin && 
-           self.interval.end == target.end &&
-           self.interval_data_equals(&self.interval, &Arc::new(target.clone())) {
+        if self.interval.begin == target.begin
+            && self.interval.end == target.end
+            && self.interval_data_equals(&self.interval, &Arc::new(target.clone()))
+        {
             true
         } else if target.begin < self.interval.begin {
-            self.left.as_ref().map_or(false, |left| left.contains(target))
+            self.left.as_ref().is_some_and(|left| left.contains(target))
         } else {
-            self.right.as_ref().map_or(false, |right| right.contains(target))
+            self.right
+                .as_ref()
+                .is_some_and(|right| right.contains(target))
         }
     }
 
@@ -308,14 +307,15 @@ impl IntervalNode {
     /// Removes a specific interval from the tree
     pub fn remove(self: Box<Self>, target: &Interval) -> Option<Box<IntervalNode>> {
         let mut boxed_self = self;
-        
-        if boxed_self.interval.begin == target.begin && 
-           boxed_self.interval.end == target.end &&
-           boxed_self.interval_data_equals(&boxed_self.interval, &Arc::new(target.clone())) {
+
+        if boxed_self.interval.begin == target.begin
+            && boxed_self.interval.end == target.end
+            && boxed_self.interval_data_equals(&boxed_self.interval, &Arc::new(target.clone()))
+        {
             // This is the node to remove
             match (boxed_self.left.take(), boxed_self.right.take()) {
-                (None, None) => None, // Leaf node, remove it
-                (Some(left), None) => Some(left), // Only left child
+                (None, None) => None,               // Leaf node, remove it
+                (Some(left), None) => Some(left),   // Only left child
                 (None, Some(right)) => Some(right), // Only right child
                 (Some(left), Some(mut right)) => {
                     // Both children exist, replace with successor
@@ -362,25 +362,29 @@ impl IntervalNode {
     pub fn remove_overlap_point(self: Box<Self>, point: f64) -> Option<Box<IntervalNode>> {
         let mut to_remove = Vec::new();
         self.collect_overlapping_point(point, &mut to_remove);
-        
+
         let mut result = Some(self);
         for interval in to_remove {
             if let Some(node) = result {
-                result = node.remove(&*interval);
+                result = node.remove(&interval);
             }
         }
         result
     }
 
     /// Remove all intervals that overlap with a range
-    pub fn remove_overlap_range(self: Box<Self>, start: f64, end: f64) -> Option<Box<IntervalNode>> {
+    pub fn remove_overlap_range(
+        self: Box<Self>,
+        start: f64,
+        end: f64,
+    ) -> Option<Box<IntervalNode>> {
         let mut to_remove = Vec::new();
         self.collect_overlapping_range(start, end, &mut to_remove);
-        
+
         let mut result = Some(self);
         for interval in to_remove {
             if let Some(node) = result {
-                result = node.remove(&*interval);
+                result = node.remove(&interval);
             }
         }
         result
@@ -390,11 +394,11 @@ impl IntervalNode {
     pub fn remove_enveloped(self: Box<Self>, start: f64, end: f64) -> Option<Box<IntervalNode>> {
         let mut to_remove = Vec::new();
         self.collect_enveloped(start, end, &mut to_remove);
-        
+
         let mut result = Some(self);
         for interval in to_remove {
             if let Some(node) = result {
-                result = node.remove(&*interval);
+                result = node.remove(&interval);
             }
         }
         result
@@ -405,15 +409,17 @@ impl IntervalNode {
         if self.interval.overlaps(point) {
             result.push(self.interval.clone());
         }
-        
+
         if let Some(ref left) = self.left {
             if left.max_end > point || (left.max_end == point && left.could_have_inclusive_end()) {
                 left.collect_overlapping_point(point, result);
             }
         }
-        
+
         if let Some(ref right) = self.right {
-            if point > self.interval.begin || (point == self.interval.begin && self.interval.start_inclusive) {
+            if point > self.interval.begin
+                || (point == self.interval.begin && self.interval.start_inclusive)
+            {
                 right.collect_overlapping_point(point, result);
             }
         }
@@ -458,43 +464,50 @@ impl IntervalNode {
     }
 
     /// Verifies that this node and its subtree maintain interval tree invariants
-    /// 
+    ///
     /// This is used internally by the tree's verify() method for debugging.
-    pub fn verify_subtree(&self, visited: &mut std::collections::HashSet<*const IntervalNode>) -> PyResult<()> {
+    pub fn verify_subtree(
+        &self,
+        visited: &mut std::collections::HashSet<*const IntervalNode>,
+    ) -> PyResult<()> {
         // Check for cycles (shouldn't happen but good to verify)
         let node_ptr = self as *const IntervalNode;
         if visited.contains(&node_ptr) {
             return Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(
-                "Error: Cycle detected in tree structure!"
+                "Error: Cycle detected in tree structure!",
             ));
         }
         visited.insert(node_ptr);
-        
+
         // Verify interval is valid
         if self.interval.begin > self.interval.end {
             return Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(
-                format!("Error: Invalid interval in node: begin={} > end={}", 
-                       self.interval.begin, self.interval.end)
+                format!(
+                    "Error: Invalid interval in node: begin={} > end={}",
+                    self.interval.begin, self.interval.end
+                ),
             ));
         }
-        
+
         // Verify max_end is at least this interval's end
         if self.max_end < self.interval.end {
             return Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(
-                format!("Error: max_end={} < interval.end={}", 
-                       self.max_end, self.interval.end)
+                format!(
+                    "Error: max_end={} < interval.end={}",
+                    self.max_end, self.interval.end
+                ),
             ));
         }
-        
+
         // Recursively verify children
         if let Some(ref left) = self.left {
             left.verify_subtree(visited)?;
         }
-        
+
         if let Some(ref right) = self.right {
             right.verify_subtree(visited)?;
         }
-        
+
         Ok(())
     }
 }

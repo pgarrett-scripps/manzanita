@@ -16,15 +16,7 @@ jobs:
           - runner: ubuntu-latest
             target: x86_64
           - runner: ubuntu-latest
-            target: x86
-          - runner: ubuntu-latest
             target: aarch64
-          - runner: ubuntu-latest
-            target: armv7
-          - runner: ubuntu-latest
-            target: s390x
-          - runner: ubuntu-latest
-            target: ppc64le
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -44,18 +36,7 @@ jobs:
           path: dist
 
   build-musllinux:
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      matrix:
-        platform:
-          - runner: ubuntu-latest
-            target: x86_64
-          - runner: ubuntu-latest
-            target: x86
-          - runner: ubuntu-latest
-            target: aarch64
-          - runner: ubuntu-latest
-            target: armv7
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -64,41 +45,32 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.platform.target }}
+          target: x86_64
           args: --release --out dist --find-interpreter
           sccache: 'true'
           manylinux: musllinux_1_2
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-musllinux-${{ matrix.platform.target }}
+          name: wheels-musllinux-x86_64
           path: dist
 
   build-windows:
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      matrix:
-        platform:
-          - runner: windows-latest
-            target: x64
-          - runner: windows-latest
-            target: x86
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: 3.x
-          architecture: ${{ matrix.platform.target }}
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
           sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-windows-${{ matrix.platform.target }}
+          name: wheels-windows-x64
           path: dist
 
   build-macos:
