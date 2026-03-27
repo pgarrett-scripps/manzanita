@@ -55,7 +55,6 @@ def test_merge_overlaps_gapless():
     assert len(t) == 1
 
 
-@pytest.mark.xfail(reason="manzanita merge_overlaps does not fully merge all overlapping intervals")
 def test_merge_overlaps_with_gap():
     t = make_tree_deduped(data.ivs1.data)
     t.merge_overlaps()
@@ -75,7 +74,6 @@ def test_merge_equals_empty():
     assert len(t) == 0
 
 
-@pytest.mark.xfail(reason="manzanita merge_equals modifies tree even without duplicate ranges")
 def test_merge_equals_wo_dupes():
     t = make_tree_deduped(data.ivs1.data)
     orig = make_tree_deduped(data.ivs1.data)
@@ -85,7 +83,6 @@ def test_merge_equals_wo_dupes():
     assert orig == t
 
 
-@pytest.mark.xfail(reason="manzanita merge_equals behavior differs from intervaltree")
 def test_merge_equals_with_dupes():
     t = make_tree_deduped(data.ivs1.data)
     orig = make_tree_deduped(data.ivs1.data)
@@ -245,7 +242,6 @@ def test_split_overlap_single_member():
     assert len(t) == 1
 
 
-@pytest.mark.xfail(reason="manzanita split_overlaps creates duplicate intervals")
 def test_split_overlap():
     t = make_tree_deduped(data.ivs1.data)
 

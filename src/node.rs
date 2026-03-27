@@ -261,10 +261,11 @@ impl IntervalNode {
 
         // Search right subtree if it might contain enveloped intervals
         if let Some(ref right) = self.right {
-            // Right subtree intervals can be enveloped if their begins are >= start
-            // Since all right subtree intervals have begin >= self.interval.begin,
-            // we need self.interval.begin >= start for any to be enveloped
-            if self.interval.begin >= start {
+            // Right subtree intervals have begin >= self.interval.begin.
+            // They can be enveloped only if their begin < end (the search range end).
+            // Since self.interval.begin is the minimum begin in the right subtree,
+            // we can prune if self.interval.begin >= end.
+            if self.interval.begin < end {
                 right.search_enveloped(start, end, result);
             }
         }
@@ -277,7 +278,9 @@ impl IntervalNode {
             && self.interval_data_equals(&self.interval, &Arc::new(target.clone()))
         {
             true
-        } else if target.begin < self.interval.begin {
+        } else if target.begin < self.interval.begin
+            || (target.begin == self.interval.begin && target.end < self.interval.end)
+        {
             self.left.as_ref().is_some_and(|left| left.contains(target))
         } else {
             self.right
@@ -317,17 +320,21 @@ impl IntervalNode {
                 (None, None) => None,               // Leaf node, remove it
                 (Some(left), None) => Some(left),   // Only left child
                 (None, Some(right)) => Some(right), // Only right child
-                (Some(left), Some(mut right)) => {
-                    // Both children exist, replace with successor
-                    let successor = right.extract_min();
-                    boxed_self.interval = successor.interval;
+                (Some(left), Some(right)) => {
+                    // Both children exist, replace with in-order successor
+                    let (successor_interval, new_right) =
+                        IntervalNode::extract_min_from(right);
+                    boxed_self.interval = successor_interval;
                     boxed_self.left = Some(left);
-                    boxed_self.right = Some(right);
+                    boxed_self.right = new_right;
                     boxed_self.update_max_end();
                     Some(boxed_self)
                 }
             }
-        } else if target.begin < boxed_self.interval.begin {
+        } else if target.begin < boxed_self.interval.begin
+            || (target.begin == boxed_self.interval.begin
+                && target.end < boxed_self.interval.end)
+        {
             if let Some(left) = boxed_self.left.take() {
                 boxed_self.left = left.remove(target);
             }
@@ -342,19 +349,21 @@ impl IntervalNode {
         }
     }
 
-    /// Extract and return the minimum node, removing it from the tree
-    fn extract_min(&mut self) -> IntervalNode {
-        if self.left.is_none() {
-            IntervalNode {
-                interval: self.interval.clone(),
-                max_end: self.max_end,
-                left: None,
-                right: self.right.take(),
-            }
+    /// Extract the minimum node from a subtree, returning its interval
+    /// and what remains of the subtree after removal.
+    fn extract_min_from(
+        mut node: Box<IntervalNode>,
+    ) -> (Arc<Interval>, Option<Box<IntervalNode>>) {
+        if node.left.is_none() {
+            // This node is the minimum; its right child replaces it
+            let interval = node.interval.clone();
+            (interval, node.right.take())
         } else {
-            let min_node = self.left.as_mut().unwrap().extract_min();
-            self.update_max_end();
-            min_node
+            let (min_interval, remaining) =
+                IntervalNode::extract_min_from(node.left.take().unwrap());
+            node.left = remaining;
+            node.update_max_end();
+            (min_interval, Some(node))
         }
     }
 

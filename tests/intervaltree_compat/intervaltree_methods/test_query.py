@@ -36,7 +36,6 @@ def test_point_queries():
     assert set_data(t[4:5]) == set(['[4,7)'])
 
 
-@pytest.mark.xfail(reason="manzanita envelop query returns empty on complex trees")
 def test_envelop_vs_overlap_queries():
     t = make_tree_deduped(data.ivs1.data)
     assert set_data(t.envelop(4, 5)) == set()

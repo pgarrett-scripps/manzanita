@@ -25,7 +25,6 @@ def test_update():
     assert sorted_iv(t)[1] == interval
 
 
-@pytest.mark.xfail(reason="manzanita union creates duplicates (allows duplicate intervals)")
 def test_union():
     t = IntervalTree()
     interval = Interval(0, 1)
@@ -236,7 +235,6 @@ def test_intersection():
     assert len(bc) > 0
 
 
-@pytest.mark.xfail(reason="manzanita symmetric_difference affected by duplicate semantics")
 def test_symmetric_difference():
     a = make_tree_deduped(data.ivs1.data)
     b = make_tree_deduped(data.ivs2.data)

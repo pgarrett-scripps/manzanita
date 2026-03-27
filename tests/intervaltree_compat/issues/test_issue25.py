@@ -9,7 +9,6 @@ from manzanita import IntervalTree
 import pytest
 
 
-@pytest.mark.xfail(reason="manzanita removei corrupts tree with float intervals (regression)")
 def test_sequence():
     t = IntervalTree()
     t.addi(6.37, 11.37)
