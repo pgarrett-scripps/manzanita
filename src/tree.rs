@@ -389,11 +389,31 @@ impl IntervalTree {
         }
     }
 
+    /// Supports deletion with `del tree[point]` and `del tree[start:end]` syntax.
+    ///
+    /// For a point, removes all intervals overlapping that point.
+    /// For a slice, removes all intervals overlapping that range.
+    fn __delitem__(&mut self, idx: &PyAny) -> PyResult<()> {
+        if let Ok(point) = idx.extract::<f64>() {
+            self.remove_overlap(point, None);
+            Ok(())
+        } else if let Ok(slice) = idx.downcast::<PySlice>() {
+            let start = slice.getattr("start")?.extract::<Option<f64>>()?
+                .unwrap_or(f64::NEG_INFINITY);
+            let stop = slice.getattr("stop")?.extract::<Option<f64>>()?
+                .unwrap_or(f64::INFINITY);
+            self.remove_overlap(start, Some(stop));
+            Ok(())
+        } else {
+            Err(PyTypeError::new_err("Index must be a number or slice"))
+        }
+    }
+
     /// Removes an interval from the tree.
-    /// 
+    ///
     /// # Arguments
     /// * `interval` - The interval to remove from the tree
-    /// 
+    ///
     /// # Errors
     /// Raises `ValueError` if the interval is not present in the tree
     pub fn remove(&mut self, interval: Interval) -> PyResult<()> {
