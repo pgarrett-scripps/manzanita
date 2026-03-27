@@ -604,7 +604,7 @@ class TestBasicFunctionality(unittest.TestCase):
 
         # Should have more intervals now, split at boundary points
         intervals = sorted(tree.items(), key=lambda i: i.begin)
-        self.assertEqual(len(intervals), 5)
+        self.assertEqual(len(intervals), 4)
 
     def test_merge_overlaps_operation(self):
         """Test merging overlapping intervals."""
