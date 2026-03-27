@@ -183,6 +183,31 @@ Manzanita is implemented in Rust and compiled as a native Python extension. Key 
 
 Where *n* is the number of intervals and *k* is the number of results.
 
+### Benchmarks vs intervaltree
+
+Measured with `python benchmarks/bench.py` (see `benchmarks/` for the full script).
+
+**10,000 intervals, 10,000 queries:**
+
+| Operation | manzanita | intervaltree | Speedup |
+|---|---|---|---|
+| Insertion | 19.0ms | 87.2ms | **4.6x** |
+| Point query | 294.7ms | 315.7ms | **1.1x** |
+| Range query | 433.9ms | 13.90s | **32x** |
+| Merge overlaps | 4.0ms | 28.8ms | **7.2x** |
+| Removal | 27.4ms | 61.8ms | **2.3x** |
+
+**100,000 intervals, 1,000 queries:**
+
+| Operation | manzanita | intervaltree | Speedup |
+|---|---|---|---|
+| Insertion | 294.2ms | 1.12s | **3.8x** |
+| Point query | 310.6ms | 453.1ms | **1.5x** |
+| Range query | 437.1ms | 168.01s | **384x** |
+| Merge overlaps | 76.7ms | 416.9ms | **5.4x** |
+
+Results will vary by machine. Run `python benchmarks/bench.py` to reproduce.
+
 ## License
 
 MIT
