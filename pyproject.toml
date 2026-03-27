@@ -4,12 +4,43 @@ build-backend = "maturin"
 
 [project]
 name = "manzanita"
+version = "0.1.0"
+description = "A high-performance interval tree library implemented in Rust with Python bindings"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.8"
+authors = [
+    { name = "pgarrett-scripps" },
+]
+keywords = ["interval", "tree", "data-structure", "range", "overlap", "query"]
 classifiers = [
-    "Programming Language :: Rust",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
 ]
-dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/pgarrett-scripps/manzanita"
+Repository = "https://github.com/pgarrett-scripps/manzanita"
+Issues = "https://github.com/pgarrett-scripps/manzanita/issues"
+
 [tool.maturin]
 features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
