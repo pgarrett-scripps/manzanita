@@ -1,3 +1,6 @@
+// Suppress warnings from PyO3 0.19 macros on newer Rust compilers
+#![allow(non_local_definitions)]
+
 //! Manzanita: High-performance interval tree library
 //!
 //! This library provides fast interval tree data structures implemented in Rust
@@ -23,14 +26,14 @@
 //!
 //! # Find intervals containing point 4.0
 //! overlapping = tree.at(4.0)
-//! 
+//!
 //! # Create from tuples
 //! tree2 = IntervalTree.from_tuples([(1, 3), (2, 4, "data")])
-//! 
+//!
 //! # Check containment
 //! if Interval(1.0, 5.0, "data1") in tree:
 //!     print("Found!")
-//! 
+//!
 //! # Advanced operations
 //! tree.split_overlaps()  # Split at all boundary points
 //! tree.merge_overlaps()  # Merge overlapping intervals
@@ -47,11 +50,11 @@ pub mod tree;
 mod node;
 
 // Re-export public types
-pub use interval::{Interval, IntervalIter, BoundaryType};
+pub use interval::{BoundaryType, Interval, IntervalIter};
 pub use tree::{IntervalTree, IntervalTreeIter};
 
 /// Python module for high-performance interval tree operations.
-/// 
+///
 /// This module provides fast interval tree data structures implemented in Rust
 /// and exposed to Python via PyO3. It's optimized for applications requiring
 /// frequent interval overlap queries.

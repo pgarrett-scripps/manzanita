@@ -17,17 +17,17 @@ pub enum BoundaryType {
 }
 
 /// An interval representing a range from `begin` to `end`, with associated `data`.
-/// 
+///
 /// This structure represents an interval with configurable boundary inclusivity.
 /// By default, intervals are half-open [begin, end) with inclusive start and exclusive end.
-/// 
+///
 /// # Examples
 /// ```python
 /// from manzanita import Interval
-/// 
+///
 /// # Create a default half-open interval [1.0, 5.0) with string data
 /// interval = Interval(1.0, 5.0, "my data")
-/// 
+///
 /// # Check if a point overlaps
 /// assert interval.overlaps(3.0) == True
 /// assert interval.overlaps(5.0) == False  # end is exclusive by default
@@ -55,30 +55,37 @@ pub struct Interval {
 #[pymethods]
 impl Interval {
     /// Create a new Interval.
-    /// 
+    ///
     /// # Arguments
     /// * `begin` - The start of the interval
     /// * `end` - The end of the interval
     /// * `data` - Associated data for this interval (default: None)
     /// * `start_inclusive` - Whether the start boundary is inclusive (default: true)
     /// * `end_inclusive` - Whether the end boundary is inclusive (default: false)
-    /// 
+    ///
     /// # Errors
     /// Returns a `PyTypeError` if `begin > end`.
     #[new]
     #[pyo3(signature = (begin, end, data=None, start_inclusive=true, end_inclusive=false))]
-    pub fn new(begin: f64, end: f64, data: Option<PyObject>, start_inclusive: Option<bool>, end_inclusive: Option<bool>) -> PyResult<Self> {
+    pub fn new(
+        begin: f64,
+        end: f64,
+        data: Option<PyObject>,
+        start_inclusive: Option<bool>,
+        end_inclusive: Option<bool>,
+    ) -> PyResult<Self> {
         if begin >= end {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                format!("Invalid interval: begin ({}) must be < end ({})", begin, end)
-            ));
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "Invalid interval: begin ({}) must be < end ({})",
+                begin, end
+            )));
         }
-        
+
         let data = data.unwrap_or_else(|| Python::with_gil(|py| py.None()));
-        
-        Ok(Interval { 
-            begin, 
-            end, 
+
+        Ok(Interval {
+            begin,
+            end,
             data,
             start_inclusive: start_inclusive.unwrap_or(true),
             end_inclusive: end_inclusive.unwrap_or(false),
@@ -86,7 +93,7 @@ impl Interval {
     }
 
     /// Checks if the interval overlaps a point.
-    /// 
+    ///
     /// Returns `true` if the point falls within the interval boundaries based on inclusivity settings.
     pub fn overlaps(&self, point: f64) -> bool {
         let start_check = if self.start_inclusive {
@@ -94,18 +101,18 @@ impl Interval {
         } else {
             self.begin < point
         };
-        
+
         let end_check = if self.end_inclusive {
             point <= self.end
         } else {
             point < self.end
         };
-        
+
         start_check && end_check
     }
 
     /// Checks if the interval overlaps a range.
-    /// 
+    ///
     /// Returns `true` if this interval overlaps with the range [start, end) based on boundary inclusivity.
     /// The range parameter is assumed to be [start, end) (start inclusive, end exclusive).
     pub fn overlaps_range(&self, start: f64, end: f64) -> bool {
@@ -113,12 +120,12 @@ impl Interval {
         // For interval [a,b] and range [start,end):
         // - No overlap if: b < start OR a >= end (considering boundary inclusivity)
         // - Overlap if: NOT (no overlap condition)
-        
+
         let no_overlap = if self.end_inclusive {
             // If interval end is inclusive, no overlap if self.end < start
             self.end < start
         } else {
-            // If interval end is exclusive, no overlap if self.end <= start  
+            // If interval end is exclusive, no overlap if self.end <= start
             self.end <= start
         } || if self.start_inclusive {
             // If interval start is inclusive, no overlap if self.begin >= end
@@ -127,34 +134,34 @@ impl Interval {
             // If interval start is exclusive, no overlap if self.begin >= end (same condition)
             self.begin >= end
         };
-        
+
         !no_overlap
     }
 
     /// Checks if this interval overlaps with another interval.
-    /// 
+    ///
     /// Returns `true` if the intervals overlap based on their boundary inclusivity.
     pub fn overlaps_interval(&self, other: &Interval) -> bool {
         // Two intervals overlap if: self.begin < other.end AND other.begin < self.end
         // But we need to consider boundary inclusivity for touching intervals
-        
+
         let self_starts_before_other_ends = if self.start_inclusive && other.end_inclusive {
-            self.begin <= other.end  // If both boundaries are inclusive, use <=
+            self.begin <= other.end // If both boundaries are inclusive, use <=
         } else {
-            self.begin < other.end   // Otherwise use <
+            self.begin < other.end // Otherwise use <
         };
-        
+
         let other_starts_before_self_ends = if other.start_inclusive && self.end_inclusive {
-            other.begin <= self.end  // If both boundaries are inclusive, use <=
+            other.begin <= self.end // If both boundaries are inclusive, use <=
         } else {
-            other.begin < self.end   // Otherwise use <
+            other.begin < self.end // Otherwise use <
         };
-        
+
         self_starts_before_other_ends && other_starts_before_self_ends
     }
 
     /// Checks if this interval is completely contained within another interval.
-    /// 
+    ///
     /// Returns `true` if this interval is enveloped by the other interval.
     pub fn enveloped_by_interval(&self, other: &Interval) -> bool {
         let start_contained = if other.start_inclusive {
@@ -162,13 +169,13 @@ impl Interval {
         } else {
             other.begin < self.begin
         };
-        
+
         let end_contained = if other.end_inclusive {
             self.end <= other.end
         } else {
             self.end < other.end
         };
-        
+
         start_contained && end_contained
     }
 
@@ -187,8 +194,10 @@ impl Interval {
         let data_str = self.data.as_ref(py).str()?.to_str()?;
         let start_bracket = if self.start_inclusive { "[" } else { "(" };
         let end_bracket = if self.end_inclusive { "]" } else { ")" };
-        Ok(format!("Interval{}{}, {}{} data={}", 
-                   start_bracket, self.begin, self.end, end_bracket, data_str))
+        Ok(format!(
+            "Interval{}{}, {}{} data={}",
+            start_bracket, self.begin, self.end, end_bracket, data_str
+        ))
     }
 
     /// Returns the length of the interval tuple (always 3: begin, end, data).
@@ -202,18 +211,16 @@ impl Interval {
             0 => Ok(self.begin.into_py(py)),
             1 => Ok(self.end.into_py(py)),
             2 => Ok(self.data.clone()),
-            _ => Err(PyIndexError::new_err("Interval index out of range (valid: 0, 1, 2)")),
+            _ => Err(PyIndexError::new_err(
+                "Interval index out of range (valid: 0, 1, 2)",
+            )),
         })
     }
 
     /// Allow unpacking Interval objects as (begin, end, data) with custom iteration.
     fn __iter__(slf: PyRef<Self>) -> PyResult<Py<IntervalIter>> {
         let py = slf.py();
-        let data = vec![
-            slf.begin.into_py(py),
-            slf.end.into_py(py),
-            slf.data.clone(),
-        ];
+        let data = vec![slf.begin.into_py(py), slf.end.into_py(py), slf.data.clone()];
         Py::new(py, IntervalIter { data, index: 0 })
     }
 
@@ -221,19 +228,21 @@ impl Interval {
     fn __eq__(&self, other: &PyAny) -> PyResult<bool> {
         if let Ok(other_interval) = other.extract::<Interval>() {
             let data_equal = Python::with_gil(|py| {
-                match (self.data.as_ref(py).is(other_interval.data.as_ref(py)), 
-                       self.data.as_ref(py).eq(&other_interval.data.as_ref(py))) {
-                    (true, _) => true,  // Same object
-                    (false, Ok(true)) => true,  // Equal content
-                    _ => false,  // Different or comparison failed
+                match (
+                    self.data.as_ref(py).is(other_interval.data.as_ref(py)),
+                    self.data.as_ref(py).eq(other_interval.data.as_ref(py)),
+                ) {
+                    (true, _) => true,         // Same object
+                    (false, Ok(true)) => true, // Equal content
+                    _ => false,                // Different or comparison failed
                 }
             });
-            
-            Ok(self.begin == other_interval.begin && 
-               self.end == other_interval.end && 
-               self.start_inclusive == other_interval.start_inclusive &&
-               self.end_inclusive == other_interval.end_inclusive &&
-               data_equal)
+
+            Ok(self.begin == other_interval.begin
+                && self.end == other_interval.end
+                && self.start_inclusive == other_interval.start_inclusive
+                && self.end_inclusive == other_interval.end_inclusive
+                && data_equal)
         } else {
             Ok(false)
         }
@@ -244,36 +253,43 @@ impl Interval {
         // Simple hash combining begin, end, and data hash
         let begin_hash = self.begin.to_bits() as isize;
         let end_hash = self.end.to_bits() as isize;
-        let data_hash = Python::with_gil(|py| {
-            self.data.as_ref(py).hash().unwrap_or(0)
-        });
-        
+        let data_hash = Python::with_gil(|py| self.data.as_ref(py).hash().unwrap_or(0));
+
         // Combine hashes using a simple method
-        Ok(begin_hash.wrapping_mul(31)
+        Ok(begin_hash
+            .wrapping_mul(31)
             .wrapping_add(end_hash.wrapping_mul(31))
             .wrapping_add(data_hash))
     }
 
     /// Rich comparison method for intervals.
-    /// 
+    ///
     /// Intervals are ordered first by begin, then by end.
     fn __richcmp__(&self, other: &PyAny, op: pyo3::basic::CompareOp) -> PyResult<PyObject> {
         use pyo3::basic::CompareOp;
-        
+
         if let Ok(other_interval) = other.extract::<Interval>() {
             let result = match op {
-                CompareOp::Lt => self.begin < other_interval.begin || 
-                                (self.begin == other_interval.begin && self.end < other_interval.end),
-                CompareOp::Le => self.begin < other_interval.begin || 
-                                (self.begin == other_interval.begin && self.end <= other_interval.end),
+                CompareOp::Lt => {
+                    self.begin < other_interval.begin
+                        || (self.begin == other_interval.begin && self.end < other_interval.end)
+                }
+                CompareOp::Le => {
+                    self.begin < other_interval.begin
+                        || (self.begin == other_interval.begin && self.end <= other_interval.end)
+                }
                 CompareOp::Eq => self.__eq__(other)?,
                 CompareOp::Ne => !self.__eq__(other)?,
-                CompareOp::Gt => self.begin > other_interval.begin || 
-                                (self.begin == other_interval.begin && self.end > other_interval.end),
-                CompareOp::Ge => self.begin > other_interval.begin || 
-                                (self.begin == other_interval.begin && self.end >= other_interval.end),
+                CompareOp::Gt => {
+                    self.begin > other_interval.begin
+                        || (self.begin == other_interval.begin && self.end > other_interval.end)
+                }
+                CompareOp::Ge => {
+                    self.begin > other_interval.begin
+                        || (self.begin == other_interval.begin && self.end >= other_interval.end)
+                }
             };
-            
+
             Python::with_gil(|py| Ok(result.into_py(py)))
         } else {
             // Can't compare with non-Interval types for ordering
@@ -281,21 +297,21 @@ impl Interval {
                 CompareOp::Eq => Ok(false.into_py(other.py())),
                 CompareOp::Ne => Ok(true.into_py(other.py())),
                 _ => Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                    "Intervals can only be compared with other Intervals"
+                    "Intervals can only be compared with other Intervals",
                 )),
             }
         }
     }
 
     /// Checks if this interval is enveloped by a range.
-    /// 
+    ///
     /// Returns `true` if this interval is completely contained within [start, end).
     /// The enveloping range is assumed to be [start, end) (start inclusive, end exclusive).
     pub fn enveloped_by(&self, start: f64, end: f64) -> bool {
         // For interval [a,b] to be enveloped by range [start,end):
         // - Interval start must be >= start: a >= start (respecting interval's start inclusivity)
         // - Interval end must be < end: b < end (respecting interval's end inclusivity)
-        
+
         let start_contained = if self.start_inclusive {
             // If interval start is inclusive, it's contained if start <= self.begin
             start <= self.begin
@@ -303,7 +319,7 @@ impl Interval {
             // If interval start is exclusive, it's contained if start < self.begin
             start < self.begin
         };
-        
+
         let end_contained = if self.end_inclusive {
             // If interval end is inclusive, it must be < end for containment in [start,end)
             self.end < end
@@ -311,7 +327,7 @@ impl Interval {
             // If interval end is exclusive, it must be <= end for containment in [start,end)
             self.end <= end
         };
-        
+
         start_contained && end_contained
     }
 }
