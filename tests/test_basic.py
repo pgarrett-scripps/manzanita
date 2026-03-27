@@ -37,11 +37,17 @@ class TestBasicFunctionality(unittest.TestCase):
         tuples = [(1.0, 3.0, "a"), (2.0, 4.0, "b")]
         tree = IntervalTree.from_tuples(tuples)
         self.assertEqual(len(tree), 2)
-        
+
         # Verify intervals were added correctly
         all_intervals = extract_interval_data(tree)
         expected = sorted(tuples)
         self.assertEqual(all_intervals, expected)
+
+    def test_tree_from_tuples_no_data(self):
+        """Test from_tuples with tuples that have no data field."""
+        tuples = [(1.0, 3.0), (2.0, 4.0)]
+        tree = IntervalTree.from_tuples(tuples)
+        self.assertEqual(len(tree), 2)
 
     def test_interval_creation(self):
         """Test creating intervals."""
@@ -50,14 +56,58 @@ class TestBasicFunctionality(unittest.TestCase):
         self.assertEqual(interval.end, 3.0)
         self.assertEqual(interval.data, "test_data")
 
+    def test_interval_no_data(self):
+        """Test creating interval without data."""
+        iv = Interval(1.0, 3.0)
+        self.assertIsNone(iv.data)
+
+    def test_interval_unpacking(self):
+        """Test tuple unpacking of an interval."""
+        iv = Interval(1.0, 5.0, "hello")
+        begin, end, data = iv
+        self.assertEqual(begin, 1.0)
+        self.assertEqual(end, 5.0)
+        self.assertEqual(data, "hello")
+
+    def test_interval_indexing(self):
+        """Test indexing into an interval."""
+        iv = Interval(2.0, 4.0, "val")
+        self.assertEqual(iv[0], 2.0)
+        self.assertEqual(iv[1], 4.0)
+        self.assertEqual(iv[2], "val")
+        with self.assertRaises(IndexError):
+            _ = iv[3]
+
+    def test_interval_repr(self):
+        """Test interval string representation."""
+        iv = Interval(1.0, 3.0, "x")
+        r = repr(iv)
+        self.assertIn("1", r)
+        self.assertIn("3", r)
+
+    def test_interval_equality(self):
+        """Test interval equality comparison."""
+        iv1 = Interval(1.0, 3.0, "a")
+        iv2 = Interval(1.0, 3.0, "a")
+        iv3 = Interval(1.0, 3.0, "b")
+        iv4 = Interval(2.0, 3.0, "a")
+        self.assertEqual(iv1, iv2)
+        self.assertNotEqual(iv1, iv3)
+        self.assertNotEqual(iv1, iv4)
+
+    def test_interval_invalid(self):
+        """Test that invalid intervals raise errors."""
+        with self.assertRaises(ValueError):
+            Interval(5.0, 3.0)  # begin > end
+
     def test_add_interval(self):
         """Test adding intervals to the tree."""
         tree = IntervalTree()
         interval = Interval(1.0, 3.0, "test")
-        
+
         tree.add(interval)
         self.assertEqual(len(tree), 1)
-        
+
         # Add another interval
         tree.add(Interval(2.0, 4.0, "test2"))
         self.assertEqual(len(tree), 2)
@@ -66,7 +116,7 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test adding interval using addi method (begin, end, data)."""
         tree = IntervalTree()
         tree.addi(1.0, 3.0, "test")
-        
+
         self.assertEqual(len(tree), 1)
         results = list(tree.at(2.0))
         self.assertEqual(len(results), 1)
@@ -77,17 +127,23 @@ class TestBasicFunctionality(unittest.TestCase):
         # Test point that intersects multiple intervals
         results = list(self.tree.at(4.0))
         self.assertGreater(len(results), 0)
-        
+
         # All returned intervals should contain the query point
         for interval in results:
             self.assertLessEqual(interval.begin, 4.0)
             self.assertGreater(interval.end, 4.0)
 
+    def test_point_query_no_results(self):
+        """Test point query that matches nothing."""
+        tree = IntervalTree()
+        tree.addi(1.0, 3.0)
+        self.assertEqual(len(tree.at(5.0)), 0)
+
     def test_slice_notation_point_query(self):
         """Test point query using slice notation tree[point]."""
         results_at = list(self.tree.at(4.0))
         results_slice = list(self.tree[4.0])
-        
+
         # Should return the same results
         at_data = extract_interval_data(results_at)
         slice_data = extract_interval_data(results_slice)
@@ -97,7 +153,7 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test querying intervals that overlap a range."""
         results = list(self.tree.overlap(3.0, 6.0))
         self.assertGreater(len(results), 0)
-        
+
         # All returned intervals should overlap with [3.0, 6.0)
         for interval in results:
             # Intervals overlap if: interval.begin < range_end and interval.end > range_begin
@@ -108,7 +164,7 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test range query using slice notation tree[begin:end]."""
         results_overlap = list(self.tree.overlap(3.0, 6.0))
         results_slice = list(self.tree[3.0:6.0])
-        
+
         # Should return the same results
         overlap_data = extract_interval_data(results_overlap)
         slice_data = extract_interval_data(results_slice)
@@ -118,9 +174,9 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test envelop query (intervals completely contained within range)."""
         # Add a small interval that should be enveloped
         self.tree.add(Interval(3.5, 4.5, "small"))
-        
+
         results = list(self.tree.envelop(3.0, 5.0))
-        
+
         # All returned intervals should be completely within [3.0, 5.0]
         for interval in results:
             self.assertGreaterEqual(interval.begin, 3.0)
@@ -136,22 +192,28 @@ class TestBasicFunctionality(unittest.TestCase):
         if not self.tree.is_empty():
             tree_begin = self.tree.begin()
             tree_end = self.tree.end()
-            
+
             # Find expected boundaries from our test data
             all_begins = [begin for begin, end, data in self.intervals]
             all_ends = [end for begin, end, data in self.intervals]
-            
+
             expected_begin = min(all_begins)
             expected_end = max(all_ends)
-            
+
             self.assertEqual(tree_begin, expected_begin)
             self.assertEqual(tree_end, expected_end)
+
+    def test_empty_tree_boundaries(self):
+        """Test begin() and end() on empty tree."""
+        tree = IntervalTree()
+        self.assertIsNone(tree.begin())
+        self.assertIsNone(tree.end())
 
     def test_iteration(self):
         """Test iterating over all intervals in the tree."""
         all_intervals = list(self.tree)
         self.assertEqual(len(all_intervals), len(self.intervals))
-        
+
         # Convert to tuples for comparison
         actual_data = extract_interval_data(all_intervals)
         expected_data = sorted(self.intervals)
@@ -161,21 +223,20 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test the items() method."""
         items_result = list(self.tree.items())
         iter_result = list(self.tree)
-        
+
         # items() and direct iteration should return the same results
         items_data = extract_interval_data(items_result)
         iter_data = extract_interval_data(iter_result)
         self.assertEqual(items_data, iter_data)
 
-    
     def test_contains_interval(self):
         """Test checking if interval is in tree using 'in' operator."""
         interval = Interval(1.0, 3.0, "test")
         tree = IntervalTree()
-        
+
         # Interval not in empty tree
         self.assertFalse(interval in tree)
-        
+
         # Add interval and check
         tree.add(interval)
         self.assertTrue(interval in tree)
@@ -184,7 +245,7 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test checking if interval is in tree using containsi method."""
         tree = IntervalTree()
         tree.addi(1.0, 3.0, "test")
-        
+
         # Check using individual parameters
         self.assertTrue(tree.containsi(1.0, 3.0, "test"))
         self.assertFalse(tree.containsi(1.0, 3.0, "different"))
@@ -193,7 +254,7 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test checking if any intervals overlap with a point."""
         tree = IntervalTree()
         tree.add(Interval(1.0, 3.0, "test"))
-        
+
         self.assertTrue(tree.overlaps(2.0))    # Point inside interval
         self.assertFalse(tree.overlaps(5.0))   # Point outside interval
 
@@ -201,18 +262,18 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test checking if any intervals overlap with a range."""
         tree = IntervalTree()
         tree.add(Interval(1.0, 3.0, "test"))
-        
+
         self.assertTrue(tree.overlaps(2.0, 4.0))   # Range overlaps
         self.assertFalse(tree.overlaps(5.0, 7.0)) # Range doesn't overlap
 
     def test_slice_assignment(self):
         """Test adding intervals using slice assignment tree[start:end] = data."""
         tree = IntervalTree()
-        
+
         # Add interval using slice notation
         tree[1.0:3.0] = "test_data"
         self.assertEqual(len(tree), 1)
-        
+
         # Check the interval was added correctly
         results = list(tree.at(2.0))
         self.assertEqual(len(results), 1)
@@ -223,11 +284,11 @@ class TestBasicFunctionality(unittest.TestCase):
         tree = IntervalTree()
         interval = Interval(1.0, 3.0, "test")
         tree.add(interval)
-        
+
         # Remove the interval
         tree.remove(interval)
         self.assertEqual(len(tree), 0)
-        
+
         # Try to remove non-existent interval (should raise ValueError)
         with self.assertRaises(ValueError):
             tree.remove(interval)
@@ -237,11 +298,11 @@ class TestBasicFunctionality(unittest.TestCase):
         tree = IntervalTree()
         interval = Interval(1.0, 3.0, "test")
         tree.add(interval)
-        
+
         # Discard the interval
         tree.discard(interval)
         self.assertEqual(len(tree), 0)
-        
+
         # Try to discard non-existent interval (should not raise error)
         tree.discard(interval)  # Should do nothing quietly
 
@@ -249,11 +310,11 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test removing intervals using removei() method."""
         tree = IntervalTree()
         tree.addi(1.0, 3.0, "test")
-        
+
         # Remove using individual parameters
         tree.removei(1.0, 3.0, "test")
         self.assertEqual(len(tree), 0)
-        
+
         # Try to remove non-existent interval (should raise ValueError)
         with self.assertRaises(ValueError):
             tree.removei(1.0, 3.0, "test")
@@ -262,11 +323,11 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test removing intervals using discardi() method."""
         tree = IntervalTree()
         tree.addi(1.0, 3.0, "test")
-        
+
         # Discard using individual parameters
         tree.discardi(1.0, 3.0, "test")
         self.assertEqual(len(tree), 0)
-        
+
         # Try to discard non-existent interval (should not raise error)
         tree.discardi(1.0, 3.0, "test")  # Should do nothing quietly
 
@@ -276,10 +337,10 @@ class TestBasicFunctionality(unittest.TestCase):
         tree.add(Interval(1.0, 4.0, "a"))
         tree.add(Interval(3.0, 6.0, "b"))
         tree.add(Interval(7.0, 9.0, "c"))
-        
+
         # Remove all intervals overlapping point 3.5
         tree.remove_overlap(3.5)
-        
+
         # Should only have the non-overlapping interval left
         remaining = list(tree)
         self.assertEqual(len(remaining), 1)
@@ -291,10 +352,10 @@ class TestBasicFunctionality(unittest.TestCase):
         tree.add(Interval(1.0, 3.0, "a"))
         tree.add(Interval(2.0, 5.0, "b"))
         tree.add(Interval(6.0, 8.0, "c"))
-        
+
         # Remove all intervals overlapping range [2.5, 6.5)
         tree.remove_overlap(2.5, 6.5)
-        
+
         # Should only have the first interval left
         remaining = list(tree)
         self.assertEqual(len(remaining), 0)
@@ -305,10 +366,10 @@ class TestBasicFunctionality(unittest.TestCase):
         tree.add(Interval(1.0, 6.0, "big"))
         tree.add(Interval(2.0, 4.0, "small"))
         tree.add(Interval(3.0, 5.0, "medium"))
-        
+
         # Remove all intervals enveloped by [1.5, 5.5)
         tree.remove_envelop(1.5, 5.5)
-        
+
         # Should only have the big interval left
         remaining = list(tree)
         self.assertEqual(len(remaining), 1)
@@ -319,11 +380,27 @@ class TestBasicFunctionality(unittest.TestCase):
         tree = IntervalTree()
         tree.add(Interval(1.0, 3.0, "test1"))
         tree.add(Interval(2.0, 4.0, "test2"))
-        
+
         # Clear the tree
         tree.clear()
         self.assertEqual(len(tree), 0)
         self.assertTrue(tree.is_empty())
+
+    def test_pop_method(self):
+        """Test popping an arbitrary interval from the tree."""
+        tree = IntervalTree()
+        tree.addi(1.0, 3.0, "a")
+        tree.addi(4.0, 6.0, "b")
+
+        iv = tree.pop()
+        self.assertIsInstance(iv, Interval)
+        self.assertEqual(len(tree), 1)
+
+    def test_pop_empty_tree(self):
+        """Test popping from an empty tree raises ValueError."""
+        tree = IntervalTree()
+        with self.assertRaises(ValueError):
+            tree.pop()
 
     def test_del_point_syntax(self):
         """Test deleting intervals using del tree[point] syntax."""
@@ -331,10 +408,10 @@ class TestBasicFunctionality(unittest.TestCase):
         tree.add(Interval(1.0, 4.0, "a"))
         tree.add(Interval(3.0, 6.0, "b"))
         tree.add(Interval(7.0, 9.0, "c"))
-        
+
         # Delete all intervals overlapping point 3.5
         del tree[3.5]
-        
+
         # Should only have the non-overlapping interval left
         remaining = list(tree)
         self.assertEqual(len(remaining), 1)
@@ -346,10 +423,10 @@ class TestBasicFunctionality(unittest.TestCase):
         tree.add(Interval(1.0, 3.0, "a"))
         tree.add(Interval(2.0, 5.0, "b"))
         tree.add(Interval(6.0, 8.0, "c"))
-        
+
         # Delete all intervals overlapping range [2.5:6.5]
         del tree[2.5:6.5]
-        
+
         # Should only have the first interval left
         remaining = list(tree)
         self.assertEqual(len(remaining), 0)
@@ -359,15 +436,15 @@ class TestBasicFunctionality(unittest.TestCase):
         tree1 = IntervalTree()
         tree1.add(Interval(1.0, 3.0, "a"))
         tree1.add(Interval(4.0, 6.0, "b"))
-        
+
         tree2 = IntervalTree()
         tree2.add(Interval(2.0, 4.0, "c"))
         tree2.add(Interval(7.0, 9.0, "d"))
-        
+
         # Test union method
         union_tree = tree1.union(tree2)
         self.assertEqual(len(union_tree), 4)
-        
+
         # Test | operator
         union_tree2 = tree1 | tree2
         self.assertEqual(len(union_tree2), 4)
@@ -376,7 +453,7 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test update() method and |= operator."""
         tree = IntervalTree()
         tree.add(Interval(1.0, 3.0, "a"))
-        
+
         intervals = [Interval(2.0, 4.0, "b"), Interval(5.0, 7.0, "c")]
         tree.update(intervals)
         self.assertEqual(len(tree), 3)
@@ -387,14 +464,14 @@ class TestBasicFunctionality(unittest.TestCase):
         tree1.add(Interval(1.0, 3.0, "a"))
         tree1.add(Interval(4.0, 6.0, "b"))
         tree1.add(Interval(7.0, 9.0, "c"))
-        
+
         tree2 = IntervalTree()
         tree2.add(Interval(4.0, 6.0, "b"))  # Same interval to remove
-        
+
         # Test difference method
         diff_tree = tree1.difference(tree2)
         self.assertEqual(len(diff_tree), 2)
-        
+
         # Test - operator
         diff_tree2 = tree1 - tree2
         self.assertEqual(len(diff_tree2), 2)
@@ -405,15 +482,15 @@ class TestBasicFunctionality(unittest.TestCase):
         tree1.add(Interval(1.0, 3.0, "a"))
         tree1.add(Interval(4.0, 6.0, "b"))
         tree1.add(Interval(7.0, 9.0, "c"))
-        
+
         tree2 = IntervalTree()
         tree2.add(Interval(4.0, 6.0, "b"))  # Same interval
         tree2.add(Interval(10.0, 12.0, "d"))  # Different interval
-        
+
         # Test intersection method
         intersect_tree = tree1.intersection(tree2)
         self.assertEqual(len(intersect_tree), 1)
-        
+
         # Test & operator
         intersect_tree2 = tree1 & tree2
         self.assertEqual(len(intersect_tree2), 1)
@@ -423,15 +500,15 @@ class TestBasicFunctionality(unittest.TestCase):
         tree1 = IntervalTree()
         tree1.add(Interval(1.0, 3.0, "a"))
         tree1.add(Interval(4.0, 6.0, "b"))
-        
+
         tree2 = IntervalTree()
         tree2.add(Interval(4.0, 6.0, "b"))  # Same interval
         tree2.add(Interval(7.0, 9.0, "c"))  # Different interval
-        
+
         # Test symmetric_difference method
         sym_diff_tree = tree1.symmetric_difference(tree2)
         self.assertEqual(len(sym_diff_tree), 2)  # "a" and "c"
-        
+
         # Test ^ operator
         sym_diff_tree2 = tree1 ^ tree2
         self.assertEqual(len(sym_diff_tree2), 2)
@@ -440,16 +517,16 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test subset and superset operations."""
         tree1 = IntervalTree()
         tree1.add(Interval(1.0, 3.0, "a"))
-        
+
         tree2 = IntervalTree()
         tree2.add(Interval(1.0, 3.0, "a"))
         tree2.add(Interval(4.0, 6.0, "b"))
-        
+
         # Test subset
         self.assertTrue(tree1.issubset(tree2))
         self.assertTrue(tree1 <= tree2)
         self.assertTrue(tree1 < tree2)  # proper subset
-        
+
         # Test superset
         self.assertTrue(tree2.issuperset(tree1))
         self.assertTrue(tree2 >= tree1)
@@ -460,14 +537,14 @@ class TestBasicFunctionality(unittest.TestCase):
         tree1 = IntervalTree()
         tree1.add(Interval(1.0, 3.0, "a"))
         tree1.add(Interval(4.0, 6.0, "b"))
-        
+
         tree2 = IntervalTree()
         tree2.add(Interval(1.0, 3.0, "a"))
         tree2.add(Interval(4.0, 6.0, "b"))
-        
+
         tree3 = IntervalTree()
         tree3.add(Interval(1.0, 3.0, "a"))
-        
+
         self.assertTrue(tree1 == tree2)
         self.assertFalse(tree1 == tree3)
 
@@ -477,7 +554,7 @@ class TestBasicFunctionality(unittest.TestCase):
         tree.add(Interval(0.0, 10.0, "big"))
         tree.add(Interval(2.0, 4.0, "small"))
         tree.add(Interval(12.0, 15.0, "separate"))
-        
+
         # Chop out the middle section
         tree.chop(3.0, 7.0)
 
@@ -485,31 +562,28 @@ class TestBasicFunctionality(unittest.TestCase):
         remaining = sorted(tree.items(), key=lambda i: i.begin)
         self.assertEqual(len(remaining), 4)
 
-        # Check the split intervals - they should preserve original boundary inclusivity
-        # Original "big" interval was [0, 10) so splits should be [0, 3) and [7, 10)
+        # Check the split intervals
         big_left = next(iv for iv in remaining if iv.begin == 0.0)
         self.assertEqual(big_left.begin, 0.0)
         self.assertEqual(big_left.end, 3.0)
         self.assertEqual(big_left.data, "big")
-        self.assertTrue(big_left.start_inclusive)  # Should preserve original start inclusivity
-        self.assertFalse(big_left.end_inclusive)   # End at chop point is exclusive
+        self.assertTrue(big_left.start_inclusive)
+        self.assertFalse(big_left.end_inclusive)
 
         big_right = next(iv for iv in remaining if iv.begin == 7.0)
         self.assertEqual(big_right.begin, 7.0)
         self.assertEqual(big_right.end, 10.0)
         self.assertEqual(big_right.data, "big")
-        self.assertTrue(big_right.start_inclusive)  # Start at chop point is inclusive
-        self.assertFalse(big_right.end_inclusive)   # Should preserve original end inclusivity
+        self.assertTrue(big_right.start_inclusive)
+        self.assertFalse(big_right.end_inclusive)
 
-        # Original "small" interval was [2, 4) so only left part [2, 3) should remain
         small_left = next(iv for iv in remaining if iv.begin == 2.0)
         self.assertEqual(small_left.begin, 2.0)
         self.assertEqual(small_left.end, 3.0)
         self.assertEqual(small_left.data, "small")
-        self.assertTrue(small_left.start_inclusive)  # Should preserve original start inclusivity
-        self.assertFalse(small_left.end_inclusive)   # End at chop point is exclusive
+        self.assertTrue(small_left.start_inclusive)
+        self.assertFalse(small_left.end_inclusive)
 
-        # The separate interval should be unchanged
         separate = next(iv for iv in remaining if iv.begin == 12.0)
         self.assertEqual(separate.begin, 12.0)
         self.assertEqual(separate.end, 15.0)
@@ -519,15 +593,15 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test chopping with a data function."""
         tree = IntervalTree()
         tree.add(Interval(0.0, 10.0, "original"))
-        
+
         def datafunc(interval, islower):
             return f"side: {'left' if islower else 'right'}"
-        
+
         tree.chop(3.0, 7.0, datafunc)
-        
+
         remaining = sorted(tree.items(), key=lambda i: i.begin)
         self.assertEqual(len(remaining), 2)
-        
+
         self.assertEqual(remaining[0].data, "side: left")
         self.assertEqual(remaining[1].data, "side: right")
 
@@ -537,17 +611,16 @@ class TestBasicFunctionality(unittest.TestCase):
         tree.add(Interval(0.0, 10.0, "big"))
         tree.add(Interval(5.0, 15.0, "overlapping"))
         tree.add(Interval(20.0, 25.0, "separate"))
-        
+
         # Slice at point 7
         tree.slice(7.0)
-        
+
         # Should split the intervals that contain point 7
         intervals = sorted(tree.items(), key=lambda i: i.begin)
-        
+
         # Should have: [0,7), [7,10), [5,7), [7,15), [20,25)
-        # But [5,7) and [0,7) might overlap, and [7,10) and [7,15) start at same point
-        self.assertGreater(len(intervals), 3)  # At least the separate interval plus splits
-        
+        self.assertGreater(len(intervals), 3)
+
         # Check that no interval spans across point 7
         for interval in intervals:
             if interval.begin < 7.0:
@@ -559,15 +632,15 @@ class TestBasicFunctionality(unittest.TestCase):
         """Test slicing with a data function."""
         tree = IntervalTree()
         tree.add(Interval(0.0, 10.0, "original"))
-        
+
         def datafunc(interval, islower):
             return f"split: {'left' if islower else 'right'}"
-        
+
         tree.slice(5.0, datafunc)
-        
+
         intervals = sorted(tree.items(), key=lambda i: i.begin)
         self.assertEqual(len(intervals), 2)
-        
+
         self.assertEqual(intervals[0].data, "split: left")
         self.assertEqual(intervals[1].data, "split: right")
 
@@ -576,17 +649,17 @@ class TestBasicFunctionality(unittest.TestCase):
         tree = IntervalTree()
         tree.add(Interval(1.0, 3.0, "a"))
         tree.add(Interval(4.0, 6.0, "b"))
-        
+
         # Copy the tree
         tree_copy = tree.copy()
-        
+
         # Should have same intervals
         self.assertEqual(len(tree), len(tree_copy))
         self.assertEqual(tree == tree_copy, True)
-        
+
         # But should be different objects
         self.assertIsNot(tree, tree_copy)
-        
+
         # Modifying copy shouldn't affect original
         tree_copy.add(Interval(10.0, 12.0, "c"))
         self.assertEqual(len(tree), 2)
@@ -597,10 +670,9 @@ class TestBasicFunctionality(unittest.TestCase):
         tree = IntervalTree()
         tree.add(Interval(1.0, 5.0, "A"))
         tree.add(Interval(3.0, 9.0, "C"))
-        
+
         # Split overlaps
         tree.split_overlaps()
-
 
         # Should have more intervals now, split at boundary points
         intervals = sorted(tree.items(), key=lambda i: i.begin)
@@ -612,15 +684,15 @@ class TestBasicFunctionality(unittest.TestCase):
         tree.add(Interval(1.0, 3.0, "A"))
         tree.add(Interval(2.0, 4.0, "B"))
         tree.add(Interval(6.0, 8.0, "C"))
-        
+
         original_count = len(tree)
-        
+
         # Merge overlaps
         tree.merge_overlaps()
-        
+
         # Should have fewer intervals
         self.assertLess(len(tree), original_count)
-        
+
         # The overlapping intervals should be merged
         intervals = list(tree.items())
         # Should have 2 intervals: merged [1,4) and separate [6,8)
@@ -632,10 +704,10 @@ class TestBasicFunctionality(unittest.TestCase):
         tree.add(Interval(1.0, 3.0, "A"))
         tree.add(Interval(1.0, 3.0, "B"))
         tree.add(Interval(4.0, 6.0, "C"))
-        
+
         # Merge equals
         tree.merge_equals()
-        
+
         # Should have 2 intervals now
         intervals = list(tree.items())
         self.assertEqual(len(intervals), 2)
@@ -646,10 +718,10 @@ class TestBasicFunctionality(unittest.TestCase):
         tree.add(Interval(1.0, 3.0, "A"))
         tree.add(Interval(3.0, 5.0, "B"))  # Adjacent
         tree.add(Interval(7.0, 9.0, "C"))  # Separate
-        
+
         # Merge neighbors
         tree.merge_neighbors()
-        
+
         # Should have 2 intervals now: merged [1,5) and separate [7,9)
         intervals = sorted(tree.items(), key=lambda i: i.begin)
         self.assertEqual(len(intervals), 2)
@@ -662,3 +734,122 @@ class TestBasicFunctionality(unittest.TestCase):
         tree = IntervalTree(start_inclusive=True, end_inclusive=False)
         interval = Interval(1, 10, None, start_inclusive=True, end_inclusive=True)
         tree.add(interval)
+
+
+class TestBoundaryInclusivity(unittest.TestCase):
+    """Test boundary inclusivity behavior."""
+
+    def test_default_half_open(self):
+        """Default intervals are [begin, end)."""
+        iv = Interval(1.0, 5.0, "x")
+        self.assertTrue(iv.start_inclusive)
+        self.assertFalse(iv.end_inclusive)
+        self.assertTrue(iv.overlaps(1.0))   # start inclusive
+        self.assertFalse(iv.overlaps(5.0))  # end exclusive
+
+    def test_fully_inclusive(self):
+        """Fully inclusive [begin, end] intervals."""
+        iv = Interval(1.0, 5.0, "x", start_inclusive=True, end_inclusive=True)
+        self.assertTrue(iv.overlaps(1.0))
+        self.assertTrue(iv.overlaps(5.0))
+
+    def test_fully_exclusive(self):
+        """Fully exclusive (begin, end) intervals."""
+        iv = Interval(1.0, 5.0, "x", start_inclusive=False, end_inclusive=False)
+        self.assertFalse(iv.overlaps(1.0))
+        self.assertFalse(iv.overlaps(5.0))
+        self.assertTrue(iv.overlaps(3.0))
+
+    def test_tree_default_boundaries(self):
+        """Tree default boundary settings apply to addi."""
+        tree = IntervalTree(start_inclusive=True, end_inclusive=True)
+        tree.addi(1.0, 5.0, "x")
+        results = tree.at(5.0)
+        self.assertEqual(len(results), 1)
+
+
+class TestEdgeCases(unittest.TestCase):
+    """Test edge cases and error handling."""
+
+    def test_single_interval(self):
+        """Test tree with a single interval."""
+        tree = IntervalTree()
+        tree.addi(1.0, 3.0, "only")
+        self.assertEqual(len(tree), 1)
+        self.assertEqual(tree.begin(), 1.0)
+        self.assertEqual(tree.end(), 3.0)
+
+    def test_duplicate_intervals(self):
+        """Test adding duplicate intervals."""
+        tree = IntervalTree()
+        tree.add(Interval(1.0, 3.0, "a"))
+        tree.add(Interval(1.0, 3.0, "a"))
+        # duplicates are kept
+        self.assertEqual(len(tree), 2)
+
+    def test_negative_intervals(self):
+        """Test intervals with negative boundaries."""
+        tree = IntervalTree()
+        tree.addi(-10.0, -5.0, "neg")
+        tree.addi(-3.0, 3.0, "cross_zero")
+        results = tree.at(-7.0)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].data, "neg")
+
+    def test_large_tree(self):
+        """Stress test with many intervals."""
+        tree = IntervalTree()
+        for i in range(1000):
+            tree.addi(float(i), float(i + 10), f"iv_{i}")
+        self.assertEqual(len(tree), 1000)
+
+        # Point query in the middle
+        results = tree.at(500.0)
+        self.assertGreater(len(results), 0)
+
+    def test_overlapping_many(self):
+        """All intervals overlap a single point."""
+        tree = IntervalTree()
+        for i in range(100):
+            tree.addi(0.0, float(i + 1), f"iv_{i}")
+        results = tree.at(0.5)
+        self.assertEqual(len(results), 100)
+
+    def test_empty_tree_operations(self):
+        """Operations on empty tree should not crash."""
+        tree = IntervalTree()
+        self.assertEqual(tree.at(1.0), [])
+        self.assertEqual(tree.overlap(1.0, 2.0), [])
+        self.assertEqual(tree.envelop(1.0, 2.0), [])
+        self.assertFalse(tree.overlaps(1.0))
+        self.assertEqual(tree.items(), [])
+        tree.clear()
+        tree.remove_overlap(1.0)
+        tree.split_overlaps()
+        tree.merge_overlaps()
+
+    def test_interval_overlaps_range(self):
+        """Test Interval.overlaps_range."""
+        iv = Interval(2.0, 8.0, "x")
+        self.assertTrue(iv.overlaps_range(1.0, 3.0))
+        self.assertTrue(iv.overlaps_range(7.0, 10.0))
+        self.assertFalse(iv.overlaps_range(9.0, 12.0))
+
+    def test_interval_overlaps_interval(self):
+        """Test Interval.overlaps_interval."""
+        iv1 = Interval(1.0, 5.0, "a")
+        iv2 = Interval(3.0, 7.0, "b")
+        iv3 = Interval(6.0, 9.0, "c")
+        self.assertTrue(iv1.overlaps_interval(iv2))
+        self.assertFalse(iv1.overlaps_interval(iv3))
+
+    def test_interval_enveloped_by(self):
+        """Test Interval.enveloped_by."""
+        iv = Interval(3.0, 5.0, "x")
+        self.assertTrue(iv.enveloped_by(1.0, 6.0))
+        self.assertTrue(iv.enveloped_by(3.0, 5.0))
+        self.assertFalse(iv.enveloped_by(4.0, 6.0))
+
+
+if __name__ == '__main__':
+    unittest.main()

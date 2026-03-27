@@ -1,4 +1,0 @@
-"""
-Empty IntervalTree data.
-"""
-data = []
