@@ -621,11 +621,13 @@ impl IntervalTree {
             result.add(interval);
         }
 
-        // Add all intervals from the other iterable
+        // Add intervals from the other iterable, skipping duplicates
         let iter = other.iter()?;
         for item in iter {
             let interval: Interval = item?.extract()?;
-            result.add(interval);
+            if !result.__contains__(interval.clone()) {
+                result.add(interval);
+            }
         }
 
         Ok(result)
@@ -751,7 +753,8 @@ impl IntervalTree {
             end_inclusive: self.end_inclusive,
         };
 
-        // Collect intervals from other
+        // Collect intervals from both
+        let self_items = self.items();
         let mut other_intervals = Vec::new();
         let iter = other.iter()?;
         for item in iter {
@@ -760,19 +763,22 @@ impl IntervalTree {
         }
 
         // Add intervals from this tree that are not in other
-        for interval in self.items() {
+        for interval in &self_items {
             if !other_intervals
                 .iter()
-                .any(|other_iv| intervals_equal(&interval, other_iv))
+                .any(|other_iv| intervals_equal(interval, other_iv))
             {
-                result.add(interval);
+                result.add(interval.clone());
             }
         }
 
-        // Add intervals from other that are not in this tree
-        for interval in other_intervals {
-            if !self.__contains__(interval.clone()) {
-                result.add(interval);
+        // Add intervals from other that are not in this tree (consistent comparison)
+        for interval in &other_intervals {
+            if !self_items
+                .iter()
+                .any(|self_iv| intervals_equal(interval, self_iv))
+            {
+                result.add(interval.clone());
             }
         }
 
@@ -1230,27 +1236,29 @@ impl IntervalTree {
 
         let mut merged = Vec::new();
         let mut current_group = vec![intervals[0].clone()];
+        let mut group_max_end = intervals[0].end;
 
         for interval in intervals.into_iter().skip(1) {
-            let last_in_group = &current_group[current_group.len() - 1];
-
-            // Check if intervals overlap or are adjacent based on boundary inclusivity
+            // Check if new interval overlaps with the group's accumulated envelope
             let overlaps_or_adjacent = if strict {
-                // Only merge if they actually overlap
-                last_in_group.overlaps_interval(&interval)
+                // Strictly overlapping: new interval starts before the group ends
+                interval.begin < group_max_end
             } else {
-                // Merge if they overlap OR are adjacent (touching boundaries)
-                last_in_group.overlaps_interval(&interval)
-                    || intervals_are_adjacent(last_in_group, &interval)
+                // Also merge adjacent (touching) intervals
+                interval.begin <= group_max_end
             };
 
             if overlaps_or_adjacent {
-                current_group.push(interval);
+                current_group.push(interval.clone());
+                if interval.end > group_max_end {
+                    group_max_end = interval.end;
+                }
             } else {
                 // Merge current group and start new one
                 let merged_interval = merge_interval_group(&current_group, datafunc.as_ref())?;
                 merged.push(merged_interval);
-                current_group = vec![interval];
+                current_group = vec![interval.clone()];
+                group_max_end = interval.end;
             }
         }
 
@@ -1292,15 +1300,32 @@ impl IntervalTree {
             groups.entry(key).or_default().push(interval);
         }
 
+        // If no duplicates and no datafunc, nothing to do
+        let has_duplicates = groups.values().any(|g| g.len() > 1);
+        if !has_duplicates && datafunc.is_none() {
+            return Ok(());
+        }
+
         self.clear();
 
         // Merge each group
         for group in groups.values() {
-            if group.len() == 1 {
+            if group.len() == 1 && datafunc.is_none() {
                 self.add(group[0].clone());
-            } else {
+            } else if datafunc.is_some() {
                 let merged_interval = merge_interval_group(group, datafunc.as_ref())?;
                 self.add(merged_interval);
+            } else {
+                // No datafunc: merged interval has None data (matches intervaltree behavior)
+                let iv = &group[0];
+                let merged = Interval::new(
+                    iv.begin,
+                    iv.end,
+                    None,
+                    Some(iv.start_inclusive),
+                    Some(iv.end_inclusive),
+                )?;
+                self.add(merged);
             }
         }
 
