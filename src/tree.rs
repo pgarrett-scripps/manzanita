@@ -366,12 +366,12 @@ impl IntervalTree {
         self.root.as_ref().map(|root| root.find_leftmost().begin)
     }
 
-    /// Returns the end coordinate of the rightmost interval.
+    /// Returns the maximum end coordinate across all intervals.
     ///
-    /// # Returns  
+    /// # Returns
     /// The maximum end value in the tree, or `None` if the tree is empty
     pub fn end(&self) -> Option<f64> {
-        self.root.as_ref().map(|root| root.find_rightmost().end)
+        self.root.as_ref().map(|root| root.max_end)
     }
 
     /// Support for `not tree` syntax.

@@ -81,6 +81,21 @@ def test_tree_bounds():
     assert_tree_bounds(make_tree_deduped(data.ivs2.data))
 
 
+def test_tree_bounds_wide_early_interval():
+    """end() must return max end, not the end of the rightmost-begin interval."""
+    t = IntervalTree()
+    t.addi(1, 100)
+    t.addi(50, 60)
+    assert t.begin() == 1
+    assert t.end() == 100
+
+    t2 = IntervalTree()
+    t2.addi(10, 200)
+    t2.addi(20, 30)
+    t2.addi(150, 160)
+    assert t2.end() == 200
+
+
 def test_membership():
     t = make_tree_deduped(data.ivs1.data)
     assert Interval(1, 2, '[1,2)') in t

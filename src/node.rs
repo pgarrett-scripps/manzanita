@@ -298,15 +298,6 @@ impl IntervalNode {
         }
     }
 
-    /// Find the rightmost interval  
-    pub fn find_rightmost(&self) -> &Arc<Interval> {
-        if let Some(ref right) = self.right {
-            right.find_rightmost()
-        } else {
-            &self.interval
-        }
-    }
-
     /// Removes a specific interval from the tree
     pub fn remove(self: Box<Self>, target: &Interval) -> Option<Box<IntervalNode>> {
         let mut boxed_self = self;
