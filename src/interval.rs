@@ -189,6 +189,74 @@ impl Interval {
         self.begin == self.end
     }
 
+    /// Checks if the interval contains a point (alias for overlaps).
+    ///
+    /// Provided for compatibility with the `intervaltree` library.
+    pub fn contains_point(&self, point: f64) -> bool {
+        self.overlaps(point)
+    }
+
+    /// Checks if this interval completely contains another interval.
+    ///
+    /// Returns `true` if the other interval's range is within this interval's range.
+    pub fn contains_interval(&self, other: &Interval) -> bool {
+        self.begin <= other.begin && self.end >= other.end
+    }
+
+    /// Returns the size of the gap between this interval and the given point or interval.
+    ///
+    /// Returns 0 if they overlap.
+    pub fn distance_to(&self, other: &PyAny) -> PyResult<f64> {
+        if let Ok(point) = other.extract::<f64>() {
+            if self.overlaps(point) {
+                Ok(0.0)
+            } else if point < self.begin {
+                Ok(self.begin - point)
+            } else {
+                Ok(point - self.end)
+            }
+        } else if let Ok(other_iv) = other.extract::<Interval>() {
+            if self.overlaps_interval(&other_iv) {
+                Ok(0.0)
+            } else if self.begin >= other_iv.end {
+                Ok(self.begin - other_iv.end)
+            } else {
+                Ok(other_iv.begin - self.end)
+            }
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                "distance_to requires a number or Interval",
+            ))
+        }
+    }
+
+    /// Returns the size of the overlap between this interval and the given point or range.
+    ///
+    /// For a range [begin, end), returns the length of the overlapping region.
+    /// For a point, returns 1 if the point is contained, 0 otherwise.
+    #[pyo3(signature = (begin, end=None))]
+    pub fn overlap_size(&self, begin: f64, end: Option<f64>) -> f64 {
+        if let Some(end_val) = end {
+            let overlap_begin = self.begin.max(begin);
+            let overlap_end = self.end.min(end_val);
+            (overlap_end - overlap_begin).max(0.0)
+        } else if self.overlaps(begin) {
+            1.0
+        } else {
+            0.0
+        }
+    }
+
+    /// Checks if this interval has the same begin and end as another, ignoring data.
+    pub fn range_matches(&self, other: &Interval) -> bool {
+        self.begin == other.begin && self.end == other.end
+    }
+
+    /// Returns a shallow copy of this interval.
+    pub fn copy(&self) -> Interval {
+        self.clone()
+    }
+
     /// String representation of the interval.
     fn __repr__(&self, py: Python) -> PyResult<String> {
         let data_str = self.data.as_ref(py).str()?.to_str()?;
