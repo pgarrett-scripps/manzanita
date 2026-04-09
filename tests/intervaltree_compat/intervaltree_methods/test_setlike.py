@@ -331,5 +331,20 @@ def test_symmetric_difference():
     assert bc == cb
 
 
+def test_invalid_update():
+    """In manzanita, invalid intervals raise ValueError at construction time."""
+    with pytest.raises(ValueError):
+        Interval(1, 0)  # begin > end
+
+    with pytest.raises(ValueError):
+        Interval(1, 1)  # begin == end
+
+
+def test_invalid_union():
+    """In manzanita, invalid intervals raise ValueError at construction time."""
+    with pytest.raises(ValueError):
+        Interval(1, 0)  # begin > end
+
+
 if __name__ == "__main__":
     pytest.main([__file__, '-v'])

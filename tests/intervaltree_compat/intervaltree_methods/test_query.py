@@ -21,6 +21,9 @@ def test_empty_queries():
     assert set(t.items()) == e
     assert set(t) == e
     assert set(t.copy()) == e
+    assert t.find_nested() == {}
+    assert t.range() is None
+    assert t.span() == 0
 
 
 def test_point_queries():
@@ -114,6 +117,15 @@ def test_overlaps():
     assert t.overlaps(0, 3)
     assert not t.overlaps(0, 1)
     assert not t.overlaps(2, 4)
+
+
+def test_span():
+    e = IntervalTree()
+    assert e.span() == 0
+
+    t = make_tree_deduped(data.ivs1.data)
+    assert t.span() == t.end() - t.begin()
+    assert t.span() == 14
 
 
 if __name__ == "__main__":
