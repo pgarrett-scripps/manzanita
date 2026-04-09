@@ -179,7 +179,8 @@ Manzanita is implemented in Rust and compiled as a native Python extension. Key 
 | `at` / `overlap` / `envelop` | O(log n + k) |
 | `remove` / `discard` | O(n) |
 | `len` | O(n) |
-| `begin` / `end` | O(n) |
+| `begin` | O(log n) |
+| `end` | O(1) |
 
 Where *n* is the number of intervals and *k* is the number of results.
 
