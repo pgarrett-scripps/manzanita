@@ -177,6 +177,34 @@ impl IntervalTree {
         Ok(())
     }
 
+    /// Adds an interval to the tree only if it's not already present.
+    ///
+    /// Unlike `add()`, this method checks for duplicates before inserting.
+    pub fn append(&mut self, interval: Interval) {
+        if !self.__contains__(interval.clone()) {
+            self.add(interval);
+        }
+    }
+
+    /// Adds an interval (by parameters) only if it's not already present.
+    ///
+    /// # Arguments
+    /// * `begin` - The start of the interval
+    /// * `end` - The end of the interval
+    /// * `data` - Associated data for this interval (default: None)
+    #[pyo3(signature = (begin, end, data=None))]
+    pub fn appendi(&mut self, begin: f64, end: f64, data: Option<PyObject>) -> PyResult<()> {
+        let interval = Interval::new(
+            begin,
+            end,
+            data,
+            Some(self.start_inclusive),
+            Some(self.end_inclusive),
+        )?;
+        self.append(interval);
+        Ok(())
+    }
+
     /// Queries for all intervals that overlap with a given point.
     ///
     /// # Arguments
@@ -1482,6 +1510,133 @@ impl IntervalTree {
         })
     }
 
+    /// Returns a minimum-spanning Interval that encloses all intervals in the tree.
+    ///
+    /// # Returns
+    /// An Interval spanning from the minimum begin to the maximum end, or None if empty
+    pub fn range(&self) -> PyResult<PyObject> {
+        Python::with_gil(|py| match &self.root {
+            None => Ok(py.None()),
+            Some(root) => {
+                let begin = root.find_leftmost().begin;
+                let end = root.max_end;
+                let interval = Interval::new(
+                    begin,
+                    end,
+                    None,
+                    Some(self.start_inclusive),
+                    Some(self.end_inclusive),
+                )?;
+                Ok(Py::new(py, interval)?.to_object(py))
+            }
+        })
+    }
+
+    /// Returns the length of the minimum-spanning interval of all intervals in the tree.
+    ///
+    /// # Returns
+    /// The span (max end - min begin), or 0 if the tree is empty
+    pub fn span(&self) -> f64 {
+        match &self.root {
+            None => 0.0,
+            Some(root) => {
+                let begin = root.find_leftmost().begin;
+                let end = root.max_end;
+                end - begin
+            }
+        }
+    }
+
+    /// Returns True if this tree has no intervals in common with the other iterable.
+    ///
+    /// This is a set-based check: two trees are disjoint if they share no
+    /// identical intervals (same begin, end, and data).
+    pub fn isdisjoint(&self, other: &PyAny) -> PyResult<bool> {
+        if let Ok(other_tree) = other.extract::<PyRef<IntervalTree>>() {
+            for interval in self.items() {
+                if other_tree.__contains__(interval) {
+                    return Ok(false);
+                }
+            }
+            return Ok(true);
+        }
+
+        let mut other_intervals = Vec::new();
+        let iter = other.iter()?;
+        for item in iter {
+            let interval: Interval = item?.extract()?;
+            other_intervals.push(interval);
+        }
+
+        for interval in self.items() {
+            if other_intervals
+                .iter()
+                .any(|other_iv| intervals_equal(&interval, other_iv))
+            {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Returns a dict mapping each interval to a set of intervals contained within it.
+    ///
+    /// Only intervals that contain at least one other interval appear as keys.
+    /// An interval A contains interval B if A.begin <= B.begin and A.end >= B.end.
+    pub fn find_nested(&self) -> PyResult<PyObject> {
+        Python::with_gil(|py| {
+            let dict = pyo3::types::PyDict::new(py);
+            let all_intervals = self.items();
+
+            for (i, parent) in all_intervals.iter().enumerate() {
+                let mut nested_py: Vec<PyObject> = Vec::new();
+                for (j, child) in all_intervals.iter().enumerate() {
+                    if i == j {
+                        continue;
+                    }
+                    if parent.begin <= child.begin && parent.end >= child.end {
+                        nested_py.push(Py::new(py, child.clone())?.to_object(py));
+                    }
+                }
+
+                if !nested_py.is_empty() {
+                    let parent_py = Py::new(py, parent.clone())?.to_object(py);
+                    let set = pyo3::types::PySet::new(py, &nested_py)?;
+                    dict.set_item(parent_py, set)?;
+                }
+            }
+
+            Ok(dict.into())
+        })
+    }
+
+    /// Pretty-prints the structure of the tree for debugging.
+    ///
+    /// # Arguments
+    /// * `tostring` - If true, returns the string instead of printing it (default: false)
+    #[pyo3(signature = (tostring=false))]
+    pub fn print_structure(&self, tostring: Option<bool>) -> PyResult<PyObject> {
+        let tostring = tostring.unwrap_or(false);
+        let mut output = String::new();
+
+        if let Some(ref root) = self.root {
+            Self::format_node_recursive(root, &mut output, 0);
+        } else {
+            output.push_str("<empty IntervalTree>");
+        }
+
+        Python::with_gil(|py| {
+            if tostring {
+                Ok(output.into_py(py))
+            } else {
+                let builtins = py.import("builtins")?;
+                builtins.call_method1("print", (&output,))?;
+                Ok(py.None())
+            }
+        })
+    }
+
     /// FOR DEBUGGING ONLY
     /// Checks the tree to ensure that all invariants are held.
     ///
@@ -1550,6 +1705,51 @@ impl IntervalTree {
 }
 
 impl IntervalTree {
+    /// Helper to format a node and its children for print_structure
+    fn format_node_recursive(node: &IntervalNode, output: &mut String, indent: usize) {
+        Python::with_gil(|py| {
+            let data_str = node
+                .interval
+                .data
+                .as_ref(py)
+                .str()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|_| "?".to_string());
+            let start_bracket = if node.interval.start_inclusive {
+                "["
+            } else {
+                "("
+            };
+            let end_bracket = if node.interval.end_inclusive {
+                "]"
+            } else {
+                ")"
+            };
+            let spaces = "  ".repeat(indent);
+            output.push_str(&format!(
+                "{}Node: Interval{}{}, {}{} data={}, max_end={}\n",
+                spaces,
+                start_bracket,
+                node.interval.begin,
+                node.interval.end,
+                end_bracket,
+                data_str,
+                node.max_end
+            ));
+        });
+
+        if let Some(ref left) = node.left {
+            let spaces = "  ".repeat(indent + 1);
+            output.push_str(&format!("{}L:\n", spaces));
+            Self::format_node_recursive(left, output, indent + 2);
+        }
+        if let Some(ref right) = node.right {
+            let spaces = "  ".repeat(indent + 1);
+            output.push_str(&format!("{}R:\n", spaces));
+            Self::format_node_recursive(right, output, indent + 2);
+        }
+    }
+
     /// Recursive helper to verify BST property for a node
     fn verify_bst_property_recursive(
         node: &IntervalNode,

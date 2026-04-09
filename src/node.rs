@@ -322,8 +322,7 @@ impl IntervalNode {
                 (None, Some(right)) => Some(right), // Only right child
                 (Some(left), Some(right)) => {
                     // Both children exist, replace with in-order successor
-                    let (successor_interval, new_right) =
-                        IntervalNode::extract_min_from(right);
+                    let (successor_interval, new_right) = IntervalNode::extract_min_from(right);
                     boxed_self.interval = successor_interval;
                     boxed_self.left = Some(left);
                     boxed_self.right = new_right;
@@ -332,8 +331,7 @@ impl IntervalNode {
                 }
             }
         } else if target.begin < boxed_self.interval.begin
-            || (target.begin == boxed_self.interval.begin
-                && target.end < boxed_self.interval.end)
+            || (target.begin == boxed_self.interval.begin && target.end < boxed_self.interval.end)
         {
             if let Some(left) = boxed_self.left.take() {
                 boxed_self.left = left.remove(target);
@@ -351,9 +349,7 @@ impl IntervalNode {
 
     /// Extract the minimum node from a subtree, returning its interval
     /// and what remains of the subtree after removal.
-    fn extract_min_from(
-        mut node: Box<IntervalNode>,
-    ) -> (Arc<Interval>, Option<Box<IntervalNode>>) {
+    fn extract_min_from(mut node: Box<IntervalNode>) -> (Arc<Interval>, Option<Box<IntervalNode>>) {
         if node.left.is_none() {
             // This node is the minimum; its right child replaces it
             let interval = node.interval.clone();
