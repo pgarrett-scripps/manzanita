@@ -1,3 +1,5 @@
+# Work In Progress (Mainly AI Generated)
+
 # Manzanita
 
 A high-performance interval tree library implemented in Rust with Python bindings via [PyO3](https://pyo3.rs/). Drop-in alternative to [intervaltree](https://github.com/chaimleib/intervaltree) with significantly better performance.
