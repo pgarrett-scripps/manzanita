@@ -16,6 +16,9 @@ use std::sync::Arc;
 pub(crate) struct IntervalNode {
     pub interval: Arc<Interval>,
     pub max_end: f64,
+    /// Maximum begin value in this subtree; used to prune left-subtree traversal
+    /// in envelop queries (skip left if max_begin < query start).
+    pub max_begin: f64,
     pub left: Option<Box<IntervalNode>>,
     pub right: Option<Box<IntervalNode>>,
 }
@@ -24,9 +27,11 @@ impl IntervalNode {
     /// Creates a new IntervalNode with the given interval.
     pub fn new(interval: Arc<Interval>) -> Self {
         let max_end = interval.end;
+        let max_begin = interval.begin;
         IntervalNode {
             interval,
             max_end,
+            max_begin,
             left: None,
             right: None,
         }
@@ -72,6 +77,15 @@ impl IntervalNode {
                 self.max_end = right.max_end;
             }
         }
+
+        // max_begin = largest begin in this subtree. In BST order the right subtree
+        // always has begins >= self.interval.begin, so max_begin lives in the right
+        // subtree (or at self if there is no right child).
+        self.max_begin = if let Some(ref right) = self.right {
+            right.max_begin
+        } else {
+            self.interval.begin
+        };
     }
 
     /// Searches for all intervals overlapping with a given point.
@@ -248,23 +262,18 @@ impl IntervalNode {
             result.push(self.interval.clone());
         }
 
-        // Search left subtree if it might contain enveloped intervals
+        // Search left subtree: skip if no left interval can have begin >= start.
+        // max_begin tracks the largest begin in the subtree; if it's below start,
+        // every left interval fails the envelop begin-condition.
         if let Some(ref left) = self.left {
-            // Left subtree intervals can be enveloped if their max_end <= end
-            if left.max_end <= end {
-                left.search_enveloped(start, end, result);
-            } else if left.max_end > start {
-                // Even if max_end > end, some intervals might still be enveloped
+            if left.max_begin >= start {
                 left.search_enveloped(start, end, result);
             }
         }
 
-        // Search right subtree if it might contain enveloped intervals
+        // Search right subtree: all right intervals have begin >= self.interval.begin.
+        // If self.interval.begin >= end, none of them can be enveloped (begin too large).
         if let Some(ref right) = self.right {
-            // Right subtree intervals have begin >= self.interval.begin.
-            // They can be enveloped only if their begin < end (the search range end).
-            // Since self.interval.begin is the minimum begin in the right subtree,
-            // we can prune if self.interval.begin >= end.
             if self.interval.begin < end {
                 right.search_enveloped(start, end, result);
             }
@@ -447,7 +456,7 @@ impl IntervalNode {
         }
 
         if let Some(ref left) = self.left {
-            if left.max_end > start {
+            if left.max_begin >= start {
                 left.collect_enveloped(start, end, result);
             }
         }
